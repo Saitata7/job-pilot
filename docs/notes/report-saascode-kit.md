@@ -470,3 +470,150 @@ Requires an API key in `.env`. Supports 7 providers: Groq (free), OpenAI, Anthro
 | 12 | `verify` checks for PostgreSQL regardless of database config | LOW |
 
 **Total: 12 bugs — 6 HIGH / 3 MEDIUM / 3 LOW**
+
+---
+
+## Bug 13: Original `ast-review.ts` Is NestJS-Only — Ignores All Non-NestJS Projects
+
+The original `ast-review.ts` shipped by saascode-kit **only checks NestJS patterns**:
+
+- Scans exclusively for `*.controller.ts` and `*.service.ts` files
+- Checks for `@UseGuards`, `@Controller`, `@Roles`, `@Public` decorators
+- Checks for `ClerkAuthGuard`, `TenantGuard`, `RolesGuard` guard chains
+- Checks for Prisma `findMany/findFirst/findUnique/create/update/delete` with `tenantId` scoping
+- Checks for `@CurrentTenant()` parameter decorators
+- Checks for `$queryRaw`/`$executeRaw` SQL injection
+- Hardcodes `apps/api/src` as the source directory and `apps/api/tsconfig.json` as the TS config
+
+**For any project that is NOT NestJS + Prisma, the AST review will either crash or return 0 findings.** The generic checks (empty catch, console.log, hardcoded secrets) are buried inside controller/service iteration loops, so they only run on `*.controller.ts` and `*.service.ts` files — meaning they are effectively dead code for non-NestJS projects.
+
+**Severity**: HIGH — The primary review tool is framework-locked.
+
+---
+
+## Full Review Results (2026-02-12, Run 3 — with fixed ast-review.ts)
+
+We rewrote `ast-review.ts` to work with any TypeScript project (not just NestJS). The rewritten version scans `src/**/*.ts` and `src/**/*.tsx` with the root `tsconfig.json`, and checks for:
+- Hardcoded secrets / API keys
+- innerHTML / dangerouslySetInnerHTML (XSS)
+- eval() usage
+- Prompt injection risks (user input in AI prompts)
+- Empty catch blocks
+- Excessive console.log
+- Hardcoded AI model names
+- Switch without default case
+- Async methods without try-catch on chrome/AI calls
+- Message handler coverage
+
+### AST Review Results
+
+| Metric | Count |
+|--------|-------|
+| Files scanned | 92 (78 .ts + 14 .tsx) |
+| Critical findings | 56 |
+| Warnings | 61 |
+| Clean files | 61 |
+
+#### Critical Findings (56)
+
+| Category | Count | Files |
+|----------|-------|-------|
+| **innerHTML XSS** | 44 | `autofill-sidebar.ts` (12), `content/index.ts` (5), `ui/overlay.ts` (7), `ui/sidebar.ts` (8), `detectors/dice.ts` (2), `detectors/greenhouse.ts` (2), `detectors/indeed.ts` (2), `detectors/lever.ts` (2), `popup/App.tsx` (2), `form-detector.ts` (2) |
+| **Prompt injection** | 12 | `message-handler.ts` (8), `context-engine.ts` (2), `auto-improver.ts` (1), `humanizer.ts` (1) |
+
+#### Warnings (61)
+
+| Category | Count | Files |
+|----------|-------|-------|
+| **Hardcoded AI model names** | 26 | `message-handler.ts` (18), `openai.ts` (3), `AISettings.tsx` (4), `ml-ai.ts` (1) |
+| **Empty catch blocks** | 14 | Various files |
+| **Excessive console.log** | 10 | `context-engine.ts` (39 logs), `generic.ts` (28), `message-handler.ts` (24), `content/index.ts` (19), `ProfileContext.tsx` (13), etc. |
+| **Switch without default** | 7 | `message-handler.ts`, `context-menu.ts`, `autofill-content.ts`, `file-parser.ts`, `parser.ts`, etc. |
+| **Prompt injection** | 4 | Additional lower-confidence findings |
+
+### check-file Results (Key Files)
+
+| File | Findings |
+|------|----------|
+| `src/background/message-handler.ts` | 5 warnings: 24x console.log, prompt injection (line 1112), 2x hardcoded model name, switch without default |
+| `src/content/index.ts` | 2 warnings: 19x console.log, switch without default |
+| `src/core/profile/context-engine.ts` | 1 warning: 39x console.log |
+| `src/ai/providers/openai.ts` | 3 warnings: 3x hardcoded model name |
+| `src/ai/providers/groq.ts` | 1 warning: 4x console.log |
+| `src/options/components/ResumeGenerator.tsx` | 1 warning: 1x console.log |
+| `src/content/autofill/autofill-sidebar.ts` | 0 (PASS — check-file doesn't detect innerHTML) |
+
+### Audit Results (with correct paths)
+
+Same as Run 2 — 9/10 false passes, 1 real warning (npm audit vulnerabilities). The audit script still checks NestJS patterns regardless of paths passed.
+
+### Top Priority Issues to Fix
+
+1. **44 innerHTML XSS risks** in content scripts — content scripts inject into third-party pages and must use safe DOM APIs
+2. **12 prompt injection risks** — user-supplied JD text goes directly into AI prompts without sanitization
+3. **26 hardcoded AI model names** — should be configurable via settings
+4. **14 empty catch blocks** — silently swallowing errors
+5. **npm vulnerabilities** — 5 moderate, 4 high, 1 critical
+
+---
+
+## Bug 14: `/docs` Skill Is NestJS-Focused — Scan Commands Target Wrong Project Type
+
+The `/docs` skill (`.claude/skills/docs.md`) hardcodes NestJS/Prisma scan commands:
+
+```bash
+# From docs.md Step 1: Scan
+find . -name "schema.prisma" | grep -v node_modules
+grep -rn "@\(Get\|Post\|Put\|Patch\|Delete\|All\)\|@Controller" --include="*.controller.ts"
+find . -path "*/src/modules/*" -name "*.module.ts" | grep -v node_modules
+```
+
+**None of these exist in a Chrome extension:**
+- No `schema.prisma` (uses IndexedDB)
+- No `*.controller.ts` (uses Chrome message handlers)
+- No `*.module.ts` NestJS modules (flat `src/` structure)
+
+**The generated docs structure is also SaaS-focused:**
+- `api-reference.md` — "All endpoints by module" → No REST API, uses Chrome message passing
+- `data-model.md` — "DB schema + relations (Mermaid ER)" from Prisma → No Prisma, uses IndexedDB stores
+- `security.md` — "Auth model, guard chain" → No auth, no guards
+- `features/` — "One per backend module (controller + service + DTOs)" → No NestJS modules
+
+**Feature template includes irrelevant sections:**
+- "Roles & Permissions" table → No roles system
+- "API Endpoints" table with Method/Route/Description/Roles → No REST endpoints
+
+**For this Chrome extension, the docs scan should target:**
+- `src/manifest.json` → Extension permissions, content scripts, service worker
+- `src/shared/utils/messaging.ts` → 45+ message types (the "API")
+- `src/background/message-handler.ts` → Message routing (the "controller")
+- `src/storage/idb-client.ts` → IndexedDB schema (4 stores, 11 indexes)
+- `src/shared/types/master-profile.types.ts` → Data model (23+ types)
+- `src/content/detectors/` → Platform support (7 job boards)
+- `src/ai/` → AI provider abstraction
+- `src/options/App.tsx` → Options page navigation (5 tabs)
+
+**Severity**: MEDIUM — Docs can be generated manually, but the skill is misleading.
+
+---
+
+## Updated Cumulative Bug Count
+
+| # | Bug | Severity |
+|---|-----|----------|
+| 1 | Template engine doesn't render CLAUDE.md | HIGH |
+| 2 | Hardcoded NestJS monorepo paths in templates | HIGH |
+| 3 | Config naming: `saascode-kit.yaml` vs `manifest.yaml` | HIGH |
+| 4 | Machine-specific npx hash in .gitignore | LOW |
+| 5 | CI pipeline will fail (wrong build commands) | HIGH |
+| 6 | PostToolUse hook runs broken validator | MEDIUM |
+| 7 | `ast-review.sh` hardcodes submodule path, breaks with npx install | HIGH |
+| 8 | `ast-review.ts` crashes without git repo | MEDIUM |
+| 9 | `echo "\n"` instead of `echo -e "\n"` in audit script | LOW |
+| 10 | YAML parser includes inline comments in path values | MEDIUM |
+| 11 | CLI router ignores manifest paths for audit/predeploy | HIGH |
+| 12 | `verify` checks for PostgreSQL regardless of database config | LOW |
+| 13 | Original `ast-review.ts` is NestJS-only — ignores all non-NestJS projects | HIGH |
+| 14 | `/docs` skill scan commands and structure are NestJS-focused | MEDIUM |
+
+**Total: 14 bugs — 7 HIGH / 4 MEDIUM / 3 LOW**
