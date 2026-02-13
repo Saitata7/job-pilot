@@ -1,5 +1,6 @@
 import type { AIProviderInterface, ChatMessage, ChatOptions, ChatResponse } from '@shared/types/ai.types';
 import type { OllamaConfig } from '@shared/types/settings.types';
+import { DEFAULT_MODELS, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_CONTEXT_LENGTH } from '@shared/constants/models';
 
 export class OllamaProvider implements AIProviderInterface {
   name = 'Ollama';
@@ -10,9 +11,9 @@ export class OllamaProvider implements AIProviderInterface {
   private contextLength: number;
 
   constructor(config: OllamaConfig) {
-    this.baseUrl = config.baseUrl || 'http://localhost:11434';
-    this.model = config.model || 'llama3.1';
-    this.contextLength = config.contextLength || 8192;
+    this.baseUrl = config.baseUrl || DEFAULT_OLLAMA_BASE_URL;
+    this.model = config.model || DEFAULT_MODELS.ollama;
+    this.contextLength = config.contextLength || DEFAULT_OLLAMA_CONTEXT_LENGTH;
   }
 
   async chat(messages: ChatMessage[], options?: ChatOptions): Promise<ChatResponse> {

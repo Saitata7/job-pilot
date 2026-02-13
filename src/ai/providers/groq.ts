@@ -1,5 +1,6 @@
 import type { AIProviderInterface, ChatMessage, ChatOptions, ChatResponse } from '@shared/types/ai.types';
 import type { GroqConfig } from '@shared/types/settings.types';
+import { DEFAULT_MODELS, GROQ_CONTEXT_LENGTHS, GROQ_DEFAULT_CONTEXT_LENGTH } from '@shared/constants/models';
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
@@ -14,7 +15,7 @@ export class GroqProvider implements AIProviderInterface {
 
   constructor(config: GroqConfig) {
     this.apiKey = config.apiKey;
-    this.model = config.model || 'llama-3.3-70b-versatile';
+    this.model = config.model || DEFAULT_MODELS.groq;
   }
 
   /**
@@ -215,9 +216,10 @@ export class GroqProvider implements AIProviderInterface {
   }
 
   getMaxContextLength(): number {
-    if (this.model.includes('70b')) return 131072;
-    if (this.model.includes('8b')) return 131072;
-    return 32768;
+    for (const [key, length] of Object.entries(GROQ_CONTEXT_LENGTHS)) {
+      if (this.model.includes(key)) return length;
+    }
+    return GROQ_DEFAULT_CONTEXT_LENGTH;
   }
 
   async isAvailable(): Promise<boolean> {

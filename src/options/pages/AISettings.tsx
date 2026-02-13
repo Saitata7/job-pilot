@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
 import type { UserSettings, AIProvider } from '@shared/types/settings.types';
 import { getDefaultSettings } from '@shared/types/settings.types';
+import {
+  DEFAULT_MODELS,
+  DEFAULT_OLLAMA_BASE_URL,
+  OPENAI_MODELS,
+  ANTHROPIC_MODELS,
+  GROQ_MODELS,
+} from '@shared/constants/models';
 
 export default function AISettings() {
   const [settings, setSettings] = useState<UserSettings>(getDefaultSettings());
@@ -70,7 +77,7 @@ export default function AISettings() {
         openai: {
           ...settings.ai.openai,
           apiKey: settings.ai.openai?.apiKey || '',
-          model: settings.ai.openai?.model || 'gpt-4o-mini',
+          model: settings.ai.openai?.model || DEFAULT_MODELS.openai,
           [field]: value,
         },
       },
@@ -85,7 +92,7 @@ export default function AISettings() {
         anthropic: {
           ...settings.ai.anthropic,
           apiKey: settings.ai.anthropic?.apiKey || '',
-          model: settings.ai.anthropic?.model || 'claude-3-haiku-20240307',
+          model: settings.ai.anthropic?.model || DEFAULT_MODELS.anthropic,
           [field]: value,
         },
       },
@@ -100,7 +107,7 @@ export default function AISettings() {
         groq: {
           ...settings.ai.groq,
           apiKey: settings.ai.groq?.apiKey || '',
-          model: settings.ai.groq?.model || 'llama-3.3-70b-versatile',
+          model: settings.ai.groq?.model || DEFAULT_MODELS.groq,
           [field]: value,
         },
       },
@@ -115,7 +122,7 @@ export default function AISettings() {
       const provider = settings.ai.provider;
 
       if (provider === 'ollama') {
-        const baseUrl = settings.ai.ollama?.baseUrl || 'http://localhost:11434';
+        const baseUrl = settings.ai.ollama?.baseUrl || DEFAULT_OLLAMA_BASE_URL;
         const response = await fetch(`${baseUrl}/api/tags`);
         if (response.ok) {
           const data = await response.json();
@@ -249,7 +256,7 @@ export default function AISettings() {
               <input
                 type="url"
                 className="input"
-                value={settings.ai.ollama?.baseUrl || 'http://localhost:11434'}
+                value={settings.ai.ollama?.baseUrl || DEFAULT_OLLAMA_BASE_URL}
                 onChange={(e) => updateOllamaConfig('baseUrl', e.target.value)}
               />
               <span className="hint">Default: http://localhost:11434</span>
@@ -259,7 +266,7 @@ export default function AISettings() {
               <input
                 type="text"
                 className="input"
-                value={settings.ai.ollama?.model || 'llama3.1'}
+                value={settings.ai.ollama?.model || DEFAULT_MODELS.ollama}
                 onChange={(e) => updateOllamaConfig('model', e.target.value)}
               />
               <span className="hint">e.g., llama3.1, mistral, mixtral</span>
@@ -287,12 +294,12 @@ export default function AISettings() {
               <label>Model</label>
               <select
                 className="select"
-                value={settings.ai.openai?.model || 'gpt-4o-mini'}
+                value={settings.ai.openai?.model || DEFAULT_MODELS.openai}
                 onChange={(e) => updateOpenAIConfig('model', e.target.value)}
               >
-                <option value="gpt-4o-mini">GPT-4o-mini (Fast, Cheap)</option>
-                <option value="gpt-4o">GPT-4o (Best Quality)</option>
-                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                {OPENAI_MODELS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -318,12 +325,12 @@ export default function AISettings() {
               <label>Model</label>
               <select
                 className="select"
-                value={settings.ai.anthropic?.model || 'claude-3-haiku-20240307'}
+                value={settings.ai.anthropic?.model || DEFAULT_MODELS.anthropic}
                 onChange={(e) => updateAnthropicConfig('model', e.target.value)}
               >
-                <option value="claude-3-haiku-20240307">Claude 3 Haiku (Fast)</option>
-                <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
-                <option value="claude-3-opus-20240229">Claude 3 Opus (Best)</option>
+                {ANTHROPIC_MODELS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -349,13 +356,12 @@ export default function AISettings() {
               <label>Model</label>
               <select
                 className="select"
-                value={settings.ai.groq?.model || 'llama-3.3-70b-versatile'}
+                value={settings.ai.groq?.model || DEFAULT_MODELS.groq}
                 onChange={(e) => updateGroqConfig('model', e.target.value)}
               >
-                <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Best)</option>
-                <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
-                <option value="llama-3.2-90b-vision-preview">Llama 3.2 90B Vision</option>
-                <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                {GROQ_MODELS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </div>
           </div>

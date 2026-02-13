@@ -9,6 +9,7 @@ import { calculateQuickATSScore, getQuickRecommendations } from '@core/ats/hybri
 import { calculateLayeredATSScore } from '@core/ats/layered-scorer';
 import { learningService } from '@core/learning';
 import { sanitizePromptInput, PROMPT_SAFETY_PREAMBLE } from '@shared/utils/prompt-safety';
+import { DEPRECATED_GROQ_MODELS } from '@shared/constants/models';
 
 export async function handleMessage(
   message: Message,
@@ -387,11 +388,7 @@ async function handleGetRecentJobs(limit?: number): Promise<MessageResponse> {
   }
 }
 
-// Deprecated Groq models that need migration
-const DEPRECATED_GROQ_MODELS: Record<string, string> = {
-  'llama-3.1-70b-versatile': 'llama-3.3-70b-versatile',
-  'llama-3.1-70b-specdec': 'llama-3.3-70b-specdec',
-};
+// Deprecated Groq models imported from @shared/constants/models
 
 /**
  * Get settings with migrations applied

@@ -1,3 +1,5 @@
+import { DEFAULT_MODELS, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_CONTEXT_LENGTH } from '@shared/constants/models';
+
 export type AIProvider = 'ollama' | 'openai' | 'anthropic' | 'groq';
 
 export interface UserSettings {
@@ -90,9 +92,9 @@ export function getDefaultSettings(): UserSettings {
     ai: {
       provider: 'ollama',
       ollama: {
-        baseUrl: 'http://localhost:11434',
-        model: 'llama3.1',
-        contextLength: 8192,
+        baseUrl: DEFAULT_OLLAMA_BASE_URL,
+        model: DEFAULT_MODELS.ollama,
+        contextLength: DEFAULT_OLLAMA_CONTEXT_LENGTH,
       },
       generation: {
         temperature: 0.7,

@@ -1,5 +1,6 @@
 import type { AIProviderInterface, ChatMessage, ChatOptions, ChatResponse } from '@shared/types/ai.types';
 import type { OpenAIConfig } from '@shared/types/settings.types';
+import { DEFAULT_MODELS, OPENAI_CONTEXT_LENGTHS, OPENAI_DEFAULT_CONTEXT_LENGTH } from '@shared/constants/models';
 
 export class OpenAIProvider implements AIProviderInterface {
   name = 'OpenAI';
@@ -11,7 +12,7 @@ export class OpenAIProvider implements AIProviderInterface {
 
   constructor(config: OpenAIConfig) {
     this.apiKey = config.apiKey;
-    this.model = config.model || 'gpt-4o-mini';
+    this.model = config.model || DEFAULT_MODELS.openai;
   }
 
   async chat(messages: ChatMessage[], options?: ChatOptions): Promise<ChatResponse> {
@@ -113,10 +114,10 @@ export class OpenAIProvider implements AIProviderInterface {
   }
 
   getMaxContextLength(): number {
-    if (this.model.includes('gpt-4o')) return 128000;
-    if (this.model.includes('gpt-4-turbo')) return 128000;
-    if (this.model.includes('gpt-4')) return 8192;
-    return 16385; // gpt-3.5-turbo default
+    for (const [key, length] of Object.entries(OPENAI_CONTEXT_LENGTHS)) {
+      if (this.model.includes(key)) return length;
+    }
+    return OPENAI_DEFAULT_CONTEXT_LENGTH;
   }
 
   async isAvailable(): Promise<boolean> {
