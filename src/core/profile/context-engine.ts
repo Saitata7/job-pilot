@@ -22,6 +22,7 @@ import {
   ANSWER_BANK_PROMPT,
   HUMANIZE_CONTENT_PROMPT,
 } from '@/ai/prompts/templates';
+import { sanitizePromptInput } from '@shared/utils/prompt-safety';
 import { generateChecksum, estimateYearsOfExperience } from '../resume/text-utils';
 
 export interface AnalysisProgress {
@@ -363,7 +364,7 @@ export class CareerContextEngine {
    * Extract structured data using AI
    */
   private async extractStructuredData(rawText: string): Promise<any> {
-    const prompt = RESUME_PARSE_PROMPT.replace('{resumeText}', rawText);
+    const prompt = RESUME_PARSE_PROMPT.replace('{resumeText}', sanitizePromptInput(rawText, 'resume_text'));
 
     try {
       console.log('[ContextEngine] Calling AI for structured extraction...');
@@ -393,7 +394,7 @@ export class CareerContextEngine {
   private async buildCareerContext(parsedData: any, estimatedYears: number): Promise<CareerContext> {
     const prompt = CAREER_CONTEXT_PROMPT.replace(
       '{parsedData}',
-      JSON.stringify(parsedData, null, 2)
+      sanitizePromptInput(JSON.stringify(parsedData, null, 2), 'parsed_resume')
     );
 
     try {
@@ -446,7 +447,7 @@ export class CareerContextEngine {
   private async enrichSkills(parsedData: any, basicSkills: string[]): Promise<SkillsWithContext> {
     const prompt = SKILLS_ENRICHMENT_PROMPT.replace(
       '{parsedData}',
-      JSON.stringify({ ...parsedData, detectedSkills: basicSkills }, null, 2)
+      sanitizePromptInput(JSON.stringify({ ...parsedData, detectedSkills: basicSkills }, null, 2), 'parsed_resume')
     );
 
     try {
@@ -491,7 +492,7 @@ export class CareerContextEngine {
    */
   private async generateAnswerBank(profile: MasterProfile): Promise<AnswerBank> {
     const candidateProfile = this.formatProfileForPrompt(profile);
-    const prompt = ANSWER_BANK_PROMPT.replace('{candidateProfile}', candidateProfile);
+    const prompt = ANSWER_BANK_PROMPT.replace('{candidateProfile}', sanitizePromptInput(candidateProfile, 'candidate_profile'));
 
     try {
       console.log('[ContextEngine] Calling AI for answer bank...');
@@ -593,7 +594,7 @@ export class CareerContextEngine {
     targetRole: string
   ): Promise<GeneratedProfile | null> {
     const prompt = PROFILE_GENERATOR_PROMPT
-      .replace('{masterProfile}', JSON.stringify(this.formatMasterForPrompt(masterProfile), null, 2))
+      .replace('{masterProfile}', sanitizePromptInput(JSON.stringify(this.formatMasterForPrompt(masterProfile), null, 2), 'master_profile'))
       .replace('{targetRole}', targetRole);
 
     try {
@@ -634,7 +635,7 @@ export class CareerContextEngine {
     writingStyle: CareerContext['writingStyle']
   ): Promise<string> {
     const prompt = HUMANIZE_CONTENT_PROMPT
-      .replace('{content}', content)
+      .replace('{content}', sanitizePromptInput(content, 'original_content'))
       .replace('{tone}', writingStyle.tone)
       .replace('{complexity}', writingStyle.complexity)
       .replace('{voice}', writingStyle.preferredVoice);

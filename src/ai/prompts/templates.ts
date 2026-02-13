@@ -1,7 +1,13 @@
-export const JOB_SCORING_PROMPT = `You are an expert career advisor analyzing job fit. Given a job description and candidate profile, provide a detailed analysis.
+import { PROMPT_SAFETY_PREAMBLE } from '@shared/utils/prompt-safety';
+
+export const JOB_SCORING_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
+
+You are an expert career advisor analyzing job fit. Given a job description and candidate profile, provide a detailed analysis.
 
 ## Job Description
+<job_description>
 {jobDescription}
+</job_description>
 
 ## Candidate Profile
 Name: {candidateName}
@@ -38,15 +44,21 @@ Respond ONLY with valid JSON in this exact format:
   "reasoning": "Brief explanation of the overall score"
 }`;
 
-export const COVER_LETTER_PROMPT = `You are an expert career coach writing a compelling cover letter.
+export const COVER_LETTER_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
+
+You are an expert career coach writing a compelling cover letter.
 
 ## Job Details
 Company: {company}
 Position: {title}
-Description: {jobDescription}
+<job_description>
+{jobDescription}
+</job_description>
 
 ## Candidate Profile
+<candidate_profile>
 {candidateProfile}
+</candidate_profile>
 
 ## Instructions
 Write a professional cover letter that:
@@ -66,10 +78,13 @@ Rules:
 
 Return ONLY the cover letter text, nothing else.`;
 
-export const SKILL_EXTRACTION_PROMPT = `Extract skills and requirements from this job description.
+export const SKILL_EXTRACTION_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
 
-## Job Description
+Extract skills and requirements from this job description.
+
+<job_description>
 {jobDescription}
+</job_description>
 
 ## Task
 Extract and categorize:
@@ -88,17 +103,25 @@ Respond ONLY with valid JSON:
   "niceToHave": ["requirement1", "requirement2"]
 }`;
 
-export const ANSWER_GENERATION_PROMPT = `You are helping a job applicant answer an application question.
+export const ANSWER_GENERATION_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
+
+You are helping a job applicant answer an application question.
 
 ## Question
+<question>
 {question}
+</question>
 
 ## Candidate Profile
+<candidate_profile>
 {candidateProfile}
+</candidate_profile>
 
 ## Job Context
 Position: {title} at {company}
-Description: {jobDescription}
+<job_description>
+{jobDescription}
+</job_description>
 
 ## Instructions
 Write a concise, compelling answer that:
@@ -115,10 +138,13 @@ Return ONLY the answer text.`;
  * Cost-effective: Modular prompts that can be run independently
  */
 
-export const RESUME_PARSE_PROMPT = `You are an expert resume parser. Extract structured information from this resume text.
+export const RESUME_PARSE_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
 
-## Resume Text
+You are an expert resume parser. Extract structured information from this resume text.
+
+<resume_text>
 {resumeText}
+</resume_text>
 
 ## Task
 Extract ALL information into this exact JSON structure. Be thorough - extract every detail you can find.
@@ -194,10 +220,13 @@ Rules:
 - Standardize dates to YYYY-MM format when possible
 - Extract ALL skills mentioned anywhere in the resume`;
 
-export const CAREER_CONTEXT_PROMPT = `You are a senior career advisor building a deep understanding of a candidate's career profile.
+export const CAREER_CONTEXT_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
 
-## Parsed Resume Data
+You are a senior career advisor building a deep understanding of a candidate's career profile.
+
+<parsed_resume>
 {parsedData}
+</parsed_resume>
 
 ## Task
 Analyze this candidate's career and create a comprehensive career context. Think like a recruiter understanding WHO this person really is.
@@ -245,10 +274,13 @@ Rules:
 - Growth areas should be constructive, not negative
 - Return ONLY valid JSON, no explanations or markdown`;
 
-export const SKILLS_ENRICHMENT_PROMPT = `Analyze and enrich the skill profile for this candidate.
+export const SKILLS_ENRICHMENT_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
 
-## Parsed Data
+Analyze and enrich the skill profile for this candidate.
+
+<parsed_resume>
 {parsedData}
+</parsed_resume>
 
 ## Task
 Create a comprehensive skills analysis with proficiency levels based on evidence.
@@ -286,10 +318,13 @@ Rules:
 - Create skill clusters for related technologies
 - Return ONLY valid JSON, no explanations or markdown`;
 
-export const PROFILE_GENERATOR_PROMPT = `Generate a role-specific resume profile for this candidate.
+export const PROFILE_GENERATOR_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
 
-## Master Profile Data
+Generate a role-specific resume profile for this candidate.
+
+<master_profile>
 {masterProfile}
+</master_profile>
 
 ## Target Role
 {targetRole}
@@ -316,10 +351,13 @@ Rules:
 - Be specific to the role, not generic
 - Return ONLY valid JSON, no explanations or markdown`;
 
-export const HUMANIZE_CONTENT_PROMPT = `Rewrite this content to sound natural and human, not AI-generated.
+export const HUMANIZE_CONTENT_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
 
-## Original Content
+Rewrite this content to sound natural and human, not AI-generated.
+
+<original_content>
 {content}
+</original_content>
 
 ## Candidate's Writing Style
 Tone: {tone}
@@ -337,10 +375,13 @@ Rewrite the content to:
 
 Return ONLY the rewritten content.`;
 
-export const ANSWER_BANK_PROMPT = `Generate answers for common application questions based on this candidate's profile.
+export const ANSWER_BANK_PROMPT = `${PROMPT_SAFETY_PREAMBLE}
 
-## Candidate Profile
+Generate answers for common application questions based on this candidate's profile.
+
+<candidate_profile>
 {candidateProfile}
+</candidate_profile>
 
 ## Task
 Generate authentic, personalized answers for these common questions. Each answer should use specific examples from the candidate's background.

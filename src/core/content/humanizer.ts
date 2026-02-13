@@ -6,6 +6,7 @@
 
 import type { AIService } from '@/ai';
 import type { CareerContext } from '@shared/types/master-profile.types';
+import { sanitizePromptInput, PROMPT_SAFETY_PREAMBLE } from '@shared/utils/prompt-safety';
 
 // Common AI phrases to avoid
 const AI_PHRASES = [
@@ -67,10 +68,14 @@ export async function humanizeWithAI(
   writingStyle: CareerContext['writingStyle'],
   aiService: AIService
 ): Promise<string> {
-  const prompt = `Rewrite this content to sound natural and human, not AI-generated.
+  const prompt = `${PROMPT_SAFETY_PREAMBLE}
+
+Rewrite this content to sound natural and human, not AI-generated.
 
 ## Original Content
+<original_content>
 ${content}
+</original_content>
 
 ## Writing Style Guidelines
 - Tone: ${writingStyle.tone}
@@ -259,15 +264,19 @@ export async function generateHumanizedCoverLetter(
   writingStyle: CareerContext['writingStyle'],
   aiService: AIService
 ): Promise<string> {
-  const prompt = `Write a cover letter that sounds like a real person wrote it, not AI.
+  const prompt = `${PROMPT_SAFETY_PREAMBLE}
+
+Write a cover letter that sounds like a real person wrote it, not AI.
 
 ## Job Details
 Company: ${companyName}
 Position: ${jobTitle}
-Description: ${jobDescription.slice(0, 2000)}
+${sanitizePromptInput(jobDescription.slice(0, 2000), 'job_description')}
 
 ## Candidate Profile
+<candidate_profile>
 ${profileSummary}
+</candidate_profile>
 
 ## Writing Guidelines
 - Tone: ${writingStyle.tone}
@@ -320,16 +329,24 @@ export async function generateHumanizedAnswer(
   aiService: AIService,
   maxWords = 200
 ): Promise<string> {
-  const prompt = `Answer this job application question naturally, as a real person would.
+  const prompt = `${PROMPT_SAFETY_PREAMBLE}
+
+Answer this job application question naturally, as a real person would.
 
 ## Question
+<question>
 ${question}
+</question>
 
 ## About the Candidate
+<candidate_profile>
 ${profileContext}
+</candidate_profile>
 
 ## Job Context
+<job_context>
 ${jobContext}
+</job_context>
 
 ## Guidelines
 - Answer in ${writingStyle.preferredVoice} voice

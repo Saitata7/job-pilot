@@ -8,6 +8,7 @@ import { getKeywordsToAdd } from '@core/ats/matcher';
 import { calculateQuickATSScore, getQuickRecommendations } from '@core/ats/hybrid-scorer';
 import { calculateLayeredATSScore } from '@core/ats/layered-scorer';
 import { learningService } from '@core/learning';
+import { sanitizePromptInput, PROMPT_SAFETY_PREAMBLE } from '@shared/utils/prompt-safety';
 
 export async function handleMessage(
   message: Message,
@@ -824,12 +825,13 @@ async function extractKeywordsWithAI(
   jobDescription: string,
   jobTitle?: string
 ): Promise<{ highPriority: string[]; lowPriority: string[] }> {
-  const prompt = `Analyze this job description and extract technical keywords/skills.
+  const prompt = `${PROMPT_SAFETY_PREAMBLE}
+
+Analyze this job description and extract technical keywords/skills.
 
 Job Title: ${jobTitle || 'Not specified'}
 
-Job Description:
-${jobDescription.substring(0, 4000)}
+${sanitizePromptInput(jobDescription.substring(0, 4000), 'job_description')}
 
 Extract keywords into two categories:
 1. HIGH PRIORITY: Must-have skills explicitly required (technologies, frameworks, languages, tools)
@@ -1764,10 +1766,11 @@ async function handleAnalyzeJDForResume(payload: {
     // STEP 1: Deep JD Analysis - Parse INTENT, not just words
     // Following chrome-agent.md Layer 1: "Parse the Intent, Not Just the Words"
     // =========================================================================
-    const analysisPrompt = `You are a senior hiring manager who has reviewed 10,000 resumes. Analyze this job description DEEPLY.
+    const analysisPrompt = `${PROMPT_SAFETY_PREAMBLE}
 
-JOB DESCRIPTION:
-${payload.jobDescription}
+You are a senior hiring manager who has reviewed 10,000 resumes. Analyze this job description DEEPLY.
+
+${sanitizePromptInput(payload.jobDescription, 'job_description')}
 
 Don't just extract keywords. Think like a hiring manager:
 
@@ -2239,10 +2242,11 @@ async function handleOptimizeResumeForJD(payload: {
     // =========================================================================
     // STEP 1: Deep JD Analysis - Understand what they REALLY need
     // =========================================================================
-    const jdAnalysisPrompt = `You are a senior hiring manager reviewing this job description. Analyze it deeply.
+    const jdAnalysisPrompt = `${PROMPT_SAFETY_PREAMBLE}
 
-JOB DESCRIPTION:
-${payload.jobDescription}
+You are a senior hiring manager reviewing this job description. Analyze it deeply.
+
+${sanitizePromptInput(payload.jobDescription, 'job_description')}
 
 Analyze and return a JSON object with:
 {
@@ -2293,7 +2297,9 @@ Think like a hiring manager, not a keyword matcher. Return ONLY valid JSON.`;
       ? payload.strengthKeywords.slice(0, 3).map(k => k.keyword).join(', ')
       : '';
 
-    const summaryPrompt = `You are a career strategist helping a candidate position themselves for a specific role.
+    const summaryPrompt = `${PROMPT_SAFETY_PREAMBLE}
+
+You are a career strategist helping a candidate position themselves for a specific role.
 
 THE EMPLOYER'S REAL NEED:
 ${jdAnalysis.coreNeed || 'Based on the job description keywords'}
@@ -2308,7 +2314,9 @@ HIDDEN PRIORITIES (read between the lines):
 ${jdAnalysis.hiddenPriorities.length > 0 ? jdAnalysis.hiddenPriorities.join(', ') : 'Reliability, ownership, impact'}
 
 CANDIDATE'S CURRENT SUMMARY:
+<current_summary>
 ${payload.currentSummary}
+</current_summary>
 
 KEYWORDS TO ADD (missing from profile):
 ${payload.missingKeywords.slice(0, 4).join(', ')}
@@ -2355,7 +2363,9 @@ Return ONLY the rewritten summary, no explanation.`;
       return `[${exp.expId}] (${durationLabel} tenure → Generate ${exp.expectedCount || 5} bullets)\nExisting bullets:\n${exp.bullets.map((b, i) => `${i + 1}. ${b}`).join('\n')}`;
     }).join('\n\n');
 
-    const bulletsPrompt = `You are a resume coach who transforms generic bullets into compelling stories.
+    const bulletsPrompt = `${PROMPT_SAFETY_PREAMBLE}
+
+You are a resume coach who transforms generic bullets into compelling stories.
 
 WHAT THIS EMPLOYER VALUES:
 - Core need: ${jdAnalysis.coreNeed || 'Technical excellence and ownership'}
@@ -2794,7 +2804,9 @@ async function handleGenerateAIAnswer(payload: {
     const targetRole = jobTitle || 'this role';
     const targetCompany = companyName || 'the company';
 
-    const prompt = `You are helping a job applicant answer an application question.
+    const prompt = `${PROMPT_SAFETY_PREAMBLE}
+
+You are helping a job applicant answer an application question.
 Generate a professional, authentic answer based on their profile.
 
 CANDIDATE PROFILE:
@@ -2807,10 +2819,12 @@ ${profileContext.summary ? `- Summary: ${profileContext.summary}` : ''}
 
 TARGET COMPANY: ${targetCompany}
 TARGET ROLE: ${targetRole}
-${jobDescription ? `JOB DESCRIPTION EXCERPT: ${jobDescription.substring(0, 500)}...` : ''}
+${jobDescription ? sanitizePromptInput(jobDescription.substring(0, 500), 'job_description') : ''}
 
 QUESTION TO ANSWER:
-"${questionText}"
+<question>
+${questionText}
+</question>
 
 INSTRUCTIONS:
 1. Write a professional, first-person answer (use "I")
