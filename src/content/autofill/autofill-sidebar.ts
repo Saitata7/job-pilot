@@ -7,6 +7,7 @@ import type { DetectedForm, DetectedField } from './form-detector';
 import type { FillPreview, PreviewField, JobContext } from './filler';
 import { fillForm, generateFillPreview, requestAIAnswer } from './filler';
 import type { ResumeProfile } from '@shared/types/profile.types';
+import { escapeHtml } from '@shared/utils/dom-utils';
 
 let sidebarElement: HTMLElement | null = null;
 let currentForm: DetectedForm | null = null;
@@ -1064,15 +1065,6 @@ function showToast(type: 'success' | 'error' | 'warning', message: string): void
 
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 3000);
-}
-
-/**
- * Escape HTML for safe rendering
- */
-function escapeHtml(str: string): string {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }
 
 /**

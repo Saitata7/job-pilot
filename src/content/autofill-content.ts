@@ -8,6 +8,7 @@ import { detectFormFields, type DetectedForm } from './autofill/form-detector';
 import { generateFillPreview, fillForm, highlightFilledFields, type FillPreview, type JobContext } from './autofill/filler';
 import { showAutofillSidebar, hideAutofillSidebar } from './autofill/autofill-sidebar';
 import type { ResumeProfile } from '@shared/types/profile.types';
+import { escapeHtml } from '@shared/utils/dom-utils';
 
 // Listen for messages from the extension
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -402,8 +403,3 @@ function showNotification(type: 'success' | 'error' | 'warning', message: string
   }, 4000);
 }
 
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}

@@ -1,4 +1,5 @@
 import type { ExtractedJob, JobPlatform } from '@shared/types/job.types';
+import { escapeHtml } from '@shared/utils/dom-utils';
 
 let overlayElement: HTMLElement | null = null;
 let isMinimized = false;
@@ -70,7 +71,7 @@ function createOverlayElement(job: ExtractedJob, platform: JobPlatform): HTMLEle
 
       <div class="jobs-pilot-tags" id="jp-tags">
         <span class="jobs-pilot-tag">${capitalize(platform)}</span>
-        ${job.employmentType ? `<span class="jobs-pilot-tag">${formatEmploymentType(job.employmentType)}</span>` : ''}
+        ${job.employmentType ? `<span class="jobs-pilot-tag">${escapeHtml(formatEmploymentType(job.employmentType))}</span>` : ''}
       </div>
     </div>
 
@@ -182,12 +183,6 @@ function toggleMinimize(overlay: HTMLElement, job: ExtractedJob): void {
     // Remove minimized content
     overlay.querySelector('#jp-minimized')?.remove();
   }
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 function capitalize(str: string): string {

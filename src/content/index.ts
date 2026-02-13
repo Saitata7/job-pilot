@@ -4,6 +4,7 @@ import { showSidebar, hideSidebar, updateATSScore } from './ui/sidebar';
 import { detectFormFields } from './autofill/form-detector';
 import { generateFillPreview, fillForm, highlightFilledFields } from './autofill/filler';
 import { detectJobPage } from './detectors/job-heuristics';
+import { escapeHtml } from '@shared/utils/dom-utils';
 import type { ExtractedJob, JobPlatform } from '@shared/types/job.types';
 import type { ResumeProfile } from '@shared/types/profile.types';
 
@@ -161,7 +162,7 @@ async function autoAnalyzeIfReady() {
         const scoreEl = sidebar.querySelector('#jp-ats-score');
         const analyzeBtn = sidebar.querySelector('#jp-analyze-btn') as HTMLButtonElement;
         if (matchedEl) {
-          matchedEl.innerHTML = `<span class="jp-tag jp-tag-placeholder" style="color: #f59e0b;">${response?.error || 'Try clicking Re-analyze'}</span>`;
+          matchedEl.innerHTML = `<span class="jp-tag jp-tag-placeholder" style="color: #f59e0b;">${escapeHtml(response?.error || 'Try clicking Re-analyze')}</span>`;
         }
         if (scoreEl) {
           scoreEl.textContent = '--';

@@ -6,6 +6,7 @@
 import type { ExtractedJob, JobPlatform } from '@shared/types/job.types';
 import type { ATSScore } from '@core/ats/matcher';
 import { scanRequirements, type RequirementGap, type UserRequirementProfile } from '@core/ats/requirement-scanner';
+import { escapeHtml } from '@shared/utils/dom-utils';
 
 let overlayElement: HTMLElement | null = null;
 let isMinimized = false;
@@ -692,7 +693,7 @@ async function loadProfilesIntoSelect(overlay: HTMLElement): Promise<void> {
       select.innerHTML = profiles.length > 0
         ? profiles.map(p => {
             const profileName = p.personal?.fullName || 'Unnamed Profile';
-            return `<option value="${p.id}" ${p.id === activeId ? 'selected' : ''}>${escapeHtml(profileName)}</option>`;
+            return `<option value="${escapeHtml(p.id)}" ${p.id === activeId ? 'selected' : ''}>${escapeHtml(profileName)}</option>`;
           }).join('')
         : '<option value="">No profiles - Create one</option>';
 
@@ -791,12 +792,6 @@ function toggleMinimize(overlay: HTMLElement, minimize: boolean): void {
     minimized.style.display = 'none';
     expanded.style.display = 'flex';
   }
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 function capitalize(str: string): string {
