@@ -63,7 +63,8 @@ export class LeverDetector implements JobDetector {
           ).join('\n\n'),
         descriptionHtml: data.descriptionPlain ? undefined : data.description,
       };
-    } catch {
+    } catch (error) {
+      console.debug('[Lever] API fetch failed:', (error as Error).message);
       return null;
     }
   }

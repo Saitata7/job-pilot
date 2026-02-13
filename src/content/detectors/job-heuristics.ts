@@ -160,8 +160,8 @@ function extractSchemaJobPosting(): JobPostingSchema | null {
           datePosted: jobPosting.datePosted as string | undefined,
         };
       }
-    } catch {
-      // Invalid JSON, continue
+    } catch (error) {
+      console.debug('[Heuristics] JSON-LD parse failed:', (error as Error).message);
     }
   }
 

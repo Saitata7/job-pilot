@@ -79,7 +79,7 @@ function extractJSON(content: string): any {
   try {
     return JSON.parse(cleaned);
   } catch {
-    // Continue to other methods
+    // Expected: direct parse may fail, continue to balanced JSON extraction
   }
 
   // Method 3: Find JSON object or array by matching balanced braces/brackets
@@ -115,7 +115,7 @@ function extractJSON(content: string): any {
         try {
           return JSON.parse(fixed);
         } catch {
-          // Continue
+          // Expected: regex-matched JSON may not be valid, exhaust all methods
         }
       }
     }

@@ -237,7 +237,8 @@ export default function MyProfile() {
       } else {
         setAiError(response.error || 'Failed to process update. Please try again.');
       }
-    } catch {
+    } catch (error) {
+      console.debug('[MyProfile] AI update processing failed:', (error as Error).message);
       setAiError('Error processing your update. Please try again.');
     } finally {
       setIsProcessingAI(false);

@@ -70,7 +70,8 @@ export class GreenhouseDetector implements JobDetector {
         description: this.stripHtml(data.content || ''),
         descriptionHtml: data.content,
       };
-    } catch {
+    } catch (error) {
+      console.debug('[Greenhouse] API fetch failed:', (error as Error).message);
       return null;
     }
   }

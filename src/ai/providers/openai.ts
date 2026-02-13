@@ -100,7 +100,7 @@ export class OpenAIProvider implements AIProviderInterface {
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) yield content;
           } catch {
-            // Skip invalid JSON
+            // Expected: SSE stream chunks may contain partial JSON
           }
         }
       }
@@ -127,7 +127,8 @@ export class OpenAIProvider implements AIProviderInterface {
         headers: { 'Authorization': `Bearer ${this.apiKey}` },
       });
       return response.ok;
-    } catch {
+    } catch (error) {
+      console.debug('[OpenAI] Availability check failed:', (error as Error).message);
       return false;
     }
   }

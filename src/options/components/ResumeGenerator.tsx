@@ -577,7 +577,8 @@ export default function ResumeGenerator({ profile, selectedRole, onClose }: Resu
       } else {
         await enhanceLocally(keywordsToAdd);
       }
-    } catch {
+    } catch (error) {
+      console.debug('[ResumeGenerator] AI enhancement failed, falling back to local:', (error as Error).message);
       const keywordsToAdd = analysis.missingKeywords.slice(0, 10).map(kw => kw.keyword);
       await enhanceLocally(keywordsToAdd);
     } finally {
@@ -622,7 +623,8 @@ export default function ResumeGenerator({ profile, selectedRole, onClose }: Resu
         setAnalysis(localAnalysis);
         setCurrentScore(localAnalysis.matchScore);
       }, 300);
-    } catch {
+    } catch (error) {
+      console.debug('[ResumeGenerator] Profile update failed:', (error as Error).message);
       setError('Failed to update profile');
     }
   };
@@ -761,8 +763,8 @@ export default function ResumeGenerator({ profile, selectedRole, onClose }: Resu
             keywordsUsed: activeRole.atsKeywords || [],
           },
         });
-      } catch {
-        // Ignore tracking errors
+      } catch (error) {
+        console.debug('[ResumeGenerator] Application tracking failed:', (error as Error).message);
       }
 
       onClose();

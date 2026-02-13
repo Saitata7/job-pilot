@@ -61,8 +61,8 @@ export class DiceDetector implements JobDetector {
             postedDate: data.datePosted ? new Date(data.datePosted) : undefined,
           };
         }
-      } catch {
-        // Continue to next script
+      } catch (error) {
+        console.debug('[Dice] JSON-LD parse failed:', (error as Error).message);
       }
     }
 

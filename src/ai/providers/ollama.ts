@@ -101,7 +101,7 @@ export class OllamaProvider implements AIProviderInterface {
               yield data.message.content;
             }
           } catch {
-            // Skip invalid JSON lines
+            // Expected: streaming lines may contain partial JSON
           }
         }
       }
@@ -123,7 +123,8 @@ export class OllamaProvider implements AIProviderInterface {
         method: 'GET',
       });
       return response.ok;
-    } catch {
+    } catch (error) {
+      console.debug('[Ollama] Availability check failed:', (error as Error).message);
       return false;
     }
   }
@@ -135,7 +136,8 @@ export class OllamaProvider implements AIProviderInterface {
 
       const data = await response.json();
       return (data.models || []).map((m: { name: string }) => m.name);
-    } catch {
+    } catch (error) {
+      console.debug('[Ollama] Failed to list models:', (error as Error).message);
       return [];
     }
   }

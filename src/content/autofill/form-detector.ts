@@ -616,7 +616,7 @@ function findSubmitButton(form: HTMLFormElement | null): HTMLElement | null {
         return button as HTMLElement;
       }
     } catch {
-      // Invalid selector, skip
+      // Expected: :contains() pseudo-selector is not valid CSS, skip
     }
   }
 

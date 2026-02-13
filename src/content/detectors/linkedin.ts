@@ -76,8 +76,8 @@ export class LinkedInDetector implements JobDetector {
             postedDate: data.datePosted ? new Date(data.datePosted) : undefined,
           };
         }
-      } catch {
-        // Continue to next script
+      } catch (error) {
+        console.debug('[LinkedIn] JSON-LD parse failed:', (error as Error).message);
       }
     }
 

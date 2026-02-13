@@ -1163,8 +1163,9 @@ Return ONLY valid JSON.`;
         const result = JSON.parse(jsonMatch[0]);
         return { success: true, data: result };
       }
-    } catch {
-      // If JSON parsing fails, treat it as a preview
+    } catch (error) {
+      // If JSON parsing fails, treat the raw AI response as a preview
+      console.debug('[MessageHandler] AI response JSON parse failed, using as preview:', (error as Error).message);
       return {
         success: true,
         data: {
@@ -1315,7 +1316,8 @@ Return ONLY valid JSON, no explanations.`;
       } else {
         throw new Error('No JSON found in response');
       }
-    } catch {
+    } catch (error) {
+      console.debug('[MessageHandler] AI profile update parse failed:', (error as Error).message);
       return { success: false, error: 'Failed to parse AI response. Please try again.' };
     }
 

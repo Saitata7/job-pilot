@@ -511,6 +511,7 @@ function formatDate(dateStr?: string): string {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   } catch {
+    // Expected: some date strings may not be parseable
     return dateStr;
   }
 }

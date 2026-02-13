@@ -279,7 +279,7 @@ async function getCurrentJobFromMainScript(): Promise<{ title?: string; company?
       return response.data;
     }
   } catch {
-    // Ignore errors
+    // Expected: main content script may not be loaded on this page
   }
   return null;
 }

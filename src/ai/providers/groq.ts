@@ -203,7 +203,7 @@ export class GroqProvider implements AIProviderInterface {
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) yield content;
           } catch {
-            // Skip invalid JSON
+            // Expected: SSE stream chunks may contain partial JSON
           }
         }
       }
@@ -228,7 +228,8 @@ export class GroqProvider implements AIProviderInterface {
         headers: { 'Authorization': `Bearer ${this.apiKey}` },
       });
       return response.ok;
-    } catch {
+    } catch (error) {
+      console.debug('[Groq] Availability check failed:', (error as Error).message);
       return false;
     }
   }

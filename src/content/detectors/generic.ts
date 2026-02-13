@@ -142,8 +142,8 @@ export class GenericDetector implements JobDetector {
             };
           }
         }
-      } catch {
-        // Continue to next script
+      } catch (error) {
+        console.debug('[Generic] JSON-LD parse failed:', (error as Error).message);
       }
     }
 
@@ -249,7 +249,7 @@ export class GenericDetector implements JobDetector {
           return text;
         }
       } catch {
-        // Invalid selector, skip
+        // Expected: dynamic selectors may be invalid CSS
       }
     }
 
@@ -329,7 +329,7 @@ export class GenericDetector implements JobDetector {
           return el.textContent.trim();
         }
       } catch {
-        // Invalid selector
+        // Expected: dynamic selectors may be invalid CSS
       }
     }
 
@@ -342,7 +342,7 @@ export class GenericDetector implements JobDetector {
           return img.alt;
         }
       } catch {
-        // Invalid selector
+        // Expected: dynamic selectors may be invalid CSS
       }
     }
 
