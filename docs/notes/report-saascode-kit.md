@@ -673,3 +673,141 @@ Pages: 0
 | 15 | `.claude/context/` is empty — snapshot produces nothing for non-NestJS, `golden-reference.md` never generated, 4 skills depend on missing files | MEDIUM |
 
 **Total: 15 bugs — 7 HIGH / 5 MEDIUM / 3 LOW**
+
+---
+
+## Bugs Found During Fix Pass (2026-02-12, Session 2)
+
+While using the kit's AST review to guide fixes for innerHTML XSS, prompt injection, empty catch blocks, and hardcoded model names, the following tool issues were discovered.
+
+---
+
+## Bug 16: AST Review Flags Constants File as "Hardcoded Model Names"
+
+After centralizing all 26 scattered model name strings into a single `src/shared/constants/models.ts` file (the standard fix for hardcoded values), the AST review now flags **every line in that constants file** as a warning:
+
+```
+[WARNING] src/shared/constants/models.ts:9   — Hardcoded AI model name
+[WARNING] src/shared/constants/models.ts:10  — Hardcoded AI model name
+[WARNING] src/shared/constants/models.ts:11  — Hardcoded AI model name
+... (18 warnings total from models.ts alone)
+```
+
+The tool uses a regex to match model name patterns (`gpt-4`, `llama`, `claude-3`, `mixtral`) regardless of context. It has no concept of "this IS the constants file where model names are supposed to live."
+
+**Impact**: The "hardcoded model names" warning category can never reach 0 — the warnings just move from scattered files to the centralized file. This makes it impossible to distinguish real issues from resolved ones.
+
+**Suggested fix**: Allow an ignore comment (e.g., `// saascode-ignore hardcoded-model`) or a config-level allowlist for constants files.
+
+**Severity**: MEDIUM — Noise that obscures real findings.
+
+---
+
+## Bug 17: AST Review Flags Catch Blocks With Comments/Logging as "Empty"
+
+The empty catch block detector flags `} catch {` (without error parameter binding) as "Empty catch block swallows errors silently" regardless of whether the catch body contains:
+- Descriptive comments explaining why the catch is intentional
+- Fallback logic (e.g., `return dateStr;`, `return null;`)
+- Console logging
+
+**Examples that are flagged despite having content:**
+
+| File | Line | Catch Body | Still Flagged? |
+|------|------|-----------|---------------|
+| `groq.ts` | 206 | `// Expected: SSE stream chunks may contain partial JSON` | YES |
+| `openai.ts` | 103 | Same SSE comment | YES |
+| `ollama.ts` | 104 | Same SSE comment | YES |
+| `form-detector.ts` | 618 | `// Expected: :contains() pseudo-selector is not valid CSS, skip` | YES |
+| `generic.ts` | 251,331,344 | `// Expected: dynamic selectors may be invalid CSS` | YES |
+| `context-engine.ts` | 81 | `// Expected: direct parse may fail, continue to balanced JSON extraction` | YES |
+| `json-utils.ts` | 104 | `// Ignore parse errors` + returns `null` | YES |
+| `MyProfile.tsx` | 992 | `// Ignore parse errors` | YES |
+| `popup/App.tsx` | 58 | `// Content script not loaded on this page` | YES |
+| `autofill-content.ts` | 281 | `// Expected: main content script may not be loaded on this page` | YES |
+
+**Root cause**: The detector uses `} catch {` pattern matching (no error parameter) rather than checking if the catch body is truly empty (`} catch { }`). Any catch without `(error)` binding is flagged, even when the body has purposeful content.
+
+**Suggested fix**: Only flag catches where the body is empty or contains only whitespace. Catches with comments, return statements, or any executable code should not be flagged.
+
+**Severity**: MEDIUM — 13 false positives in current run, making it hard to find real issues.
+
+---
+
+## Bug 18: AST Review Flags innerHTML Reads as XSS Writes
+
+The innerHTML XSS detector flags **read operations** (`return el.innerHTML`) as "Direct innerHTML assignment — XSS risk." These are DOM reads for data extraction, not writes that could enable XSS.
+
+**Examples of false positives (reads, not writes):**
+
+| File | Line | Code | Operation |
+|------|------|------|-----------|
+| `detectors/dice.ts` | 149-150 | `if (el?.innerHTML) { return el.innerHTML; }` | READ |
+| `detectors/greenhouse.ts` | 134-135 | Same `getHtml()` helper pattern | READ |
+| `detectors/lever.ts` | 135-136 | Same pattern | READ |
+| `detectors/indeed.ts` | 100-101 | Same pattern | READ |
+| `detectors/linkedin.ts` | 213-214 | Same pattern | READ |
+| `detectors/generic.ts` | Multiple | Same pattern | READ |
+
+Every job detector has a `getHtml()` helper that reads `el.innerHTML` to capture the raw description HTML for later display. These are read operations — the value flows outward (into a return value), not inward (from user input into the DOM).
+
+The tool regex-matches any line containing `innerHTML` without distinguishing:
+- `element.innerHTML = userInput` (WRITE — real XSS risk)
+- `const html = element.innerHTML` (READ — not XSS)
+- `if (el?.innerHTML) return el.innerHTML` (READ — not XSS)
+
+**Impact**: ~20 of the 52 "critical" innerHTML findings are false positives (reads). This inflates the critical count and dilutes focus from real issues.
+
+**Suggested fix**: Only flag lines where innerHTML appears on the LEFT side of an assignment (`=`), not when it's on the right side or in a return/condition.
+
+**Severity**: HIGH — False criticals undermine trust in the tool's critical findings.
+
+---
+
+## Bug 19: Inconsistency Between `audit` and `review` for Empty Catch Blocks
+
+The `saascode audit` command reports **PASS** for "Potentially empty catch blocks", while the `saascode review` (AST review) flags **13 warnings** for empty catch blocks in the same codebase at the same time.
+
+```
+# audit says:
+[PASS] Potentially empty catch blocks
+
+# review says:
+[WARNING] src/ai/providers/groq.ts:206 — Empty catch block swallows errors silently
+[WARNING] src/ai/providers/ollama.ts:104 — Empty catch block swallows errors silently
+[WARNING] src/ai/providers/openai.ts:103 — Empty catch block swallows errors silently
+... (13 total)
+```
+
+The two tools disagree because they use different detection methods:
+- `full-audit.sh` likely uses a simple `grep` for `catch {}` (truly empty body)
+- `ast-review.ts` flags any `catch` without an error parameter binding
+
+**Severity**: LOW — Confusing but not blocking. Users may think they're "clean" from the audit while the review still flags issues.
+
+---
+
+## Updated Final Cumulative Bug Count
+
+| # | Bug | Severity | Found During |
+|---|-----|----------|-------------|
+| 1 | Template engine doesn't render CLAUDE.md | HIGH | Static analysis |
+| 2 | Hardcoded NestJS monorepo paths in templates | HIGH | Static analysis |
+| 3 | Config naming: `saascode-kit.yaml` vs `manifest.yaml` | HIGH | Static analysis |
+| 4 | Machine-specific npx hash in .gitignore | LOW | Static analysis |
+| 5 | CI pipeline will fail (wrong build commands) | HIGH | Static analysis |
+| 6 | PostToolUse hook runs broken validator | MEDIUM | Static analysis |
+| 7 | `ast-review.sh` hardcodes submodule path, breaks with npx install | HIGH | Runtime |
+| 8 | `ast-review.ts` crashes without git repo | MEDIUM | Runtime |
+| 9 | `echo "\n"` instead of `echo -e "\n"` in audit script | LOW | Runtime |
+| 10 | YAML parser includes inline comments in path values | MEDIUM | Runtime |
+| 11 | CLI router ignores manifest paths for audit/predeploy | HIGH | Runtime |
+| 12 | `verify` checks for PostgreSQL regardless of database config | LOW | Runtime |
+| 13 | Original `ast-review.ts` is NestJS-only | HIGH | Runtime |
+| 14 | `/docs` skill scan commands are NestJS-focused | MEDIUM | Runtime |
+| 15 | `.claude/context/` empty — snapshot produces nothing for non-NestJS | MEDIUM | Runtime |
+| 16 | AST review flags constants file as "hardcoded model names" | MEDIUM | Fix pass |
+| 17 | AST review flags catch blocks with comments/logging as "empty" | MEDIUM | Fix pass |
+| 18 | AST review flags innerHTML reads as XSS writes (~20 false criticals) | HIGH | Fix pass |
+| 19 | `audit` and `review` disagree on empty catch block status | LOW | Fix pass |
+
+**Total: 19 bugs — 8 HIGH / 7 MEDIUM / 4 LOW**
