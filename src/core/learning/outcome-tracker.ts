@@ -385,8 +385,13 @@ export class OutcomeTracker {
    * Get cached stats
    */
   async getStats(): Promise<OutcomeStats> {
-    const result = await chrome.storage.local.get(STATS_KEY);
-    return result[STATS_KEY] || await this.computeAndCacheStats();
+    try {
+      const result = await chrome.storage.local.get(STATS_KEY);
+      return result[STATS_KEY] || await this.computeAndCacheStats();
+    } catch (error) {
+      console.debug('[OutcomeTracker] Failed to get stats:', (error as Error).message);
+      return this.computeAndCacheStats();
+    }
   }
 
   /**
@@ -463,16 +468,25 @@ export class OutcomeTracker {
    * Save to storage
    */
   private async saveToStorage(): Promise<void> {
-    const data = Array.from(this.applications.values());
-    await chrome.storage.local.set({ [STORAGE_KEY]: data });
+    try {
+      const data = Array.from(this.applications.values());
+      await chrome.storage.local.set({ [STORAGE_KEY]: data });
+    } catch (error) {
+      console.debug('[OutcomeTracker] Failed to save to storage:', (error as Error).message);
+    }
   }
 
   /**
    * Load from storage
    */
   private async loadFromStorage(): Promise<TrackedApplication[] | null> {
-    const result = await chrome.storage.local.get(STORAGE_KEY);
-    return result[STORAGE_KEY] || null;
+    try {
+      const result = await chrome.storage.local.get(STORAGE_KEY);
+      return result[STORAGE_KEY] || null;
+    } catch (error) {
+      console.debug('[OutcomeTracker] Failed to load from storage:', (error as Error).message);
+      return null;
+    }
   }
 
   /**

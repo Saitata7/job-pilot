@@ -75,18 +75,22 @@ export class AutoImprover {
   }
 
   private async initialize(): Promise<void> {
-    // Load saved improvements
-    const saved = await chrome.storage.local.get(STORAGE_KEY);
-    if (saved[STORAGE_KEY]) {
-      for (const imp of saved[STORAGE_KEY]) {
-        this.improvements.set(imp.id, imp);
+    try {
+      // Load saved improvements
+      const saved = await chrome.storage.local.get(STORAGE_KEY);
+      if (saved[STORAGE_KEY]) {
+        for (const imp of saved[STORAGE_KEY]) {
+          this.improvements.set(imp.id, imp);
+        }
       }
-    }
 
-    // Run analysis if needed
-    const now = Date.now();
-    if (now - this.lastAnalysis > this.analysisInterval) {
-      await this.runFullAnalysis();
+      // Run analysis if needed
+      const now = Date.now();
+      if (now - this.lastAnalysis > this.analysisInterval) {
+        await this.runFullAnalysis();
+      }
+    } catch (error) {
+      console.debug('[AutoImprover] Initialization failed:', (error as Error).message);
     }
   }
 
@@ -446,11 +450,15 @@ export class AutoImprover {
    * Save to storage
    */
   private async saveToStorage(): Promise<void> {
-    const data = Array.from(this.improvements.values());
-    await chrome.storage.local.set({
-      [STORAGE_KEY]: data,
-      'auto_improver_last_analysis': this.lastAnalysis,
-    });
+    try {
+      const data = Array.from(this.improvements.values());
+      await chrome.storage.local.set({
+        [STORAGE_KEY]: data,
+        'auto_improver_last_analysis': this.lastAnalysis,
+      });
+    } catch (error) {
+      console.debug('[AutoImprover] Failed to save to storage:', (error as Error).message);
+    }
   }
 }
 

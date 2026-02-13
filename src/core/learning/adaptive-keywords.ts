@@ -471,20 +471,29 @@ export class AdaptiveKeywordDB {
    * Save to chrome.storage
    */
   private async saveToStorage(): Promise<void> {
-    const data = {
-      keywords: Array.from(this.keywords.values()),
-      lastSaved: Date.now(),
-    };
+    try {
+      const data = {
+        keywords: Array.from(this.keywords.values()),
+        lastSaved: Date.now(),
+      };
 
-    await chrome.storage.local.set({ [STORAGE_KEY]: data });
+      await chrome.storage.local.set({ [STORAGE_KEY]: data });
+    } catch (error) {
+      console.debug('[AdaptiveKeywords] Failed to save to storage:', (error as Error).message);
+    }
   }
 
   /**
    * Load from chrome.storage
    */
   private async loadFromStorage(): Promise<{ keywords: KeywordEntry[] } | null> {
-    const result = await chrome.storage.local.get(STORAGE_KEY);
-    return result[STORAGE_KEY] || null;
+    try {
+      const result = await chrome.storage.local.get(STORAGE_KEY);
+      return result[STORAGE_KEY] || null;
+    } catch (error) {
+      console.debug('[AdaptiveKeywords] Failed to load from storage:', (error as Error).message);
+      return null;
+    }
   }
 
   /**
