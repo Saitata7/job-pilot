@@ -1,130 +1,128 @@
-# SaasCode Kit — Bug Report
+# SaasCode Kit — Bug Report (New Version)
 
-**Date**: 2026-02-12
+**Date**: 2026-02-13
 **Project**: Jobs Pilot (Chrome Extension, Manifest V3)
-**Kit Version**: github:Saitata7/saascode-kit (latest, updated 2026-02-12)
+**Kit Version**: github:Saitata7/saascode-kit (latest, re-installed 2026-02-13)
+**New features**: `report`, `report --github`, `report --summary`, `sweep`, `cloak/uncloak`, `docs`
 
 ---
 
-## Current AST Review Results
+## Current Review Results
 
 | Metric | Count |
 |--------|-------|
 | Files scanned | 95 (81 .ts + 14 .tsx) |
-| Critical | 52 |
-| Warnings | 44 |
+| Critical | 40 |
+| Warnings | 206 |
 
 ### Breakdown
 
 | Category | Type | Count | Notes |
 |----------|------|-------|-------|
-| innerHTML XSS | Critical | 52 | ~20 are false positives (reads, not writes) — see Bug 5 |
-| Hardcoded model names | Warning | 20+ | All in `models.ts` constants file — see Bug 3 |
-| Empty catch (comment-only) | Warning | ~6 | Catches with only comments, no code — see Bug 4 |
-| Excessive console | Warning | ~10 | Files with >10 console statements |
-| Switch without default | Warning | ~7 | Message handler switches |
+| innerHTML XSS | Critical | 40 | Still flags reads as writes |
+| console.log() in production | Warning | 175 | NEW: flags every individual statement, not just files with >10 |
+| console.debug() in production | Warning | 23 | NEW: flags every individual statement |
+| switch without default | Warning | 4 | |
+| Hardcoded model names | Warning | 4 | Down from 20+ (only `ml-ai.ts` keyword file, not constants file) |
 
 ### Audit Results
 
-0 critical, 1 warning (npm audit vulnerabilities), 9 passed.
+0 critical, 1 warning (npm audit), 12 passed. Audit now properly reads manifest paths and skips non-applicable checks.
+
+### Improvements Over Previous Version
+
+- Audit reads correct paths (`src/background`, `src/options`) instead of `apps/api`
+- Audit properly skips NestJS-only checks with "(skipped — unknown framework: chrome-service-worker)"
+- Model name check no longer flags constants file (`models.ts` clean)
+- innerHTML criticals reduced from 52 to 40
+- Audit passes increased from 9 to 12 (new skip-aware checks)
+- New `docs` command generates useful project-overview.md
+- Issue logging: `sweep`/`audit` write to `.saascode/logs/issues-YYYY-MM-DD.jsonl`
 
 ---
 
-## Open Bugs
+## New Bugs Found
 
-### Bug 1: Template Engine Doesn't Render CLAUDE.md
+### Bug 1: `cloak` Command Corrupts All Scripts — Destructive and Non-Reversible
 
-The generated `CLAUDE.md` contains raw Handlebars expressions (`{{generated_date}}`, `{{#if auth.multi_tenant}}`, etc.) that were never rendered. The init command copies the template without running it through the template engine.
+**Severity**: CRITICAL
 
-**Severity**: HIGH
+Running `saascode cloak` then `saascode uncloak` **permanently corrupts** the project:
 
-### Bug 2: Hardcoded NestJS Monorepo Paths
+1. **All `.sh` scripts get path corruption**: `/.saascode` becomes `.saascode` (leading `/` stripped). After cloak+uncloak, 4 of 14 scripts fail `bash -n` syntax check.
+2. **CLAUDE.md overwritten**: Replaced with kit's unrendered template. Since CLAUDE.md is in `.gitignore`, the original is **permanently lost** (not recoverable from git).
+3. **`saascode-kit.yaml` deleted, replaced with `manifest.yaml`**: Uncloak says "manifest.yaml left as-is" — doesn't restore original filename.
+4. **`.gitignore` corrupted**: npx cache path becomes `node_modules.saascode/` (missing `/`) and entry ordering changed.
 
-Scripts, CI, skills, and checklists hardcode `apps/api/src`, `apps/portal/src`, `*.controller.ts`, `*.service.ts`, Prisma patterns. None exist in a Chrome extension.
+**Specific script corruption after cloak+uncloak:**
 
-Affected: `ast-review.ts` (source scan path), `endpoint-parity.sh`, `full-audit.sh`, `pre-deploy.sh`, `snapshot.sh`, `saascode.yml` CI pipeline, 10+ skills.
+| Script | Syntax Error | Cause |
+|--------|-------------|-------|
+| `saascode.sh:733` | `unexpected token '}'` | `/.saascode` → `.saascode` throughout, breaks paths in heredocs |
+| `report-cli.sh:239` | `unexpected token '('` | `[saascode]` → `.saascode]` (bracket stripped from title string) |
+| `sweep-cli.sh:236` | `unexpected EOF` | Same bracket/path corruption |
+| `intent-cli.sh:215` | `unexpected EOF` | Same pattern |
 
-**Severity**: HIGH
+**Root cause**: The cloak replacement regex strips `[saascode` and `/saascode` patterns too aggressively. It doesn't escape the `[` bracket in strings like `[saascode]`, and it strips the `/` from path references like `/.saascode/`.
 
-### Bug 3: AST Review Flags Constants File as "Hardcoded Model Names"
+**Impact**: Running `cloak` on a project with spaces in the path or custom CLAUDE.md will cause data loss. The uncloak doesn't properly reverse the damage.
 
-After centralizing model names into `src/shared/constants/models.ts` (the standard fix), the AST review flags every line in that file as a warning. The `as const` skip doesn't help since individual model strings aren't on `as const` lines.
-
-The warning category can never reach 0 — warnings just move from scattered files to the centralized file.
-
-**Severity**: MEDIUM
-
-### Bug 4: AST Review Flags Catches With Comment-Only Bodies as "Empty"
-
-The new AST-based detection uses `statements.length === 0`. Comments aren't AST statements, so catches with intentional comments (explaining why the catch is empty) are still flagged. ~6 false positives remain.
-
-**Severity**: MEDIUM
-
-### Bug 5: AST Review Flags innerHTML Reads as XSS Writes
-
-The detector flags any line containing `.innerHTML` — including reads like `return el.innerHTML` and `if (el?.innerHTML)`. ~20 of the 52 criticals are false positives (reads in detector `getHtml()` helpers).
-
-Has `// safe` escape hatch, but requires manually annotating every read line.
+### Bug 2: `report` Command Breaks on Paths With Spaces
 
 **Severity**: HIGH
 
-### Bug 6: Config Naming Mismatch (`saascode-kit.yaml` vs `manifest.yaml`)
+`report-cli.sh` line 146 uses `for F in $LOG_FILES` where `$LOG_FILES` is an unquoted space-separated string. If the project path contains a space (e.g., `Jobs pilot`), the path gets split:
 
-Init creates `saascode-kit.yaml`, but all scripts read `manifest.yaml`. Scripts fall back to hardcoded defaults that enable NestJS tenancy/backend checks.
-
-**Severity**: HIGH
-
-### Bug 7: CLI Router Ignores Manifest Paths
-
-`saascode.sh` router doesn't pass manifest-configured paths to scripts. `audit` defaults to `apps/api` and `apps/portal` instead of reading `src/background` and `src/options` from config.
-
-**Severity**: HIGH
-
-### Bug 8: `echo "\n"` Instead of `echo -e "\n"` in Audit Script
-
-Output contains literal `\n\033[0;36m` escape sequences instead of rendered colors/newlines.
-
-**Severity**: LOW
-
-### Bug 9: YAML Parser Includes Inline Comments in Path Values
-
-Schema path in `saascode-kit.yaml`:
-```yaml
-schema: "src/storage/schemas"          # IndexedDB schemas
 ```
-Gets parsed as `src/storage/schemas"          # IndexedDB schemas` — quote and comment included.
+cat: /Users/saitata/Desktop/MINE/Projects/Jobs: No such file or directory
+cat: pilot/.saascode/logs/issues-2026-02-13.jsonl: No such file or directory
+```
+
+This makes `report`, `report --summary`, and `report --github` completely non-functional for any project with spaces in its path.
+
+**Fix**: Use an array instead of a space-separated string, or use `while IFS= read` loop.
+
+### Bug 3: `lib.sh` Export Errors on Dotted Variable Names
 
 **Severity**: MEDIUM
 
-### Bug 10: `verify` Checks for PostgreSQL Regardless of Database Config
+`lib.sh` line 144-152 tries to `export` variables with dots in their names:
 
-Reports "PostgreSQL installed" as a pass for a Chrome extension with no PostgreSQL dependency.
+```
+export: `TMPL_auth.guard_pattern=none': not a valid identifier
+export: `TMPL_auth.multi_tenant=false': not a valid identifier
+export: `TMPL_tenancy.enabled=false': not a valid identifier
+...
+```
 
-**Severity**: LOW
+Bash doesn't allow dots in variable names. This produces 9 error messages every time any script sources `lib.sh`. The variables are silently not set, which means scripts that depend on these template values will get empty strings.
 
-### Bug 11: `/docs` Skill Scan Commands Are NestJS-Focused
+### Bug 4: `init` Fails Due to lib.sh Export Error
 
-Scans for `schema.prisma`, `*.controller.ts`, `*.module.ts` — none exist in Chrome extension.
+**Severity**: HIGH
+
+`npx github:Saitata7/saascode-kit init` fails with `export: TMPL_auth.guard_pattern=none: not a valid identifier` from lib.sh. The init stops before copying any files, requiring manual sync (`cp`) of scripts/skills/rules.
+
+### Bug 5: AST Review Now Flags Every Individual `console.log` Statement
 
 **Severity**: MEDIUM
 
-### Bug 12: `.claude/context/` Empty — Skills Depend on Missing Files
+Previous version flagged files with >10 console statements (aggregate check). New version flags **every single `console.log()` and `console.debug()` as a WARNING** at the individual line level — 198 warnings total.
 
-`snapshot` produces nothing for non-NestJS projects. `golden-reference.md` is never generated. 4 skills (`build-feature`, `review-pr`, `recipe`, `changelog`) depend on these missing files.
+This makes the warning count extremely noisy (206 warnings, 96% are console statements) and buries the actual meaningful warnings (4 switch-without-default, 4 hardcoded model names).
 
-**Severity**: MEDIUM
-
-### Bug 13: `console.debug` Counted in Excessive Console Check
-
-Creates catch-22: fix empty catches by adding `console.debug` logging → get warned about too many console statements. Not currently triggering but could for files near the threshold (>10).
+### Bug 6: `echo "\n"` Still Not Fixed in Audit Summary
 
 **Severity**: LOW
 
-### Bug 14: Machine-Specific npx Hash in .gitignore
+Audit summary still outputs literal escape sequences:
+```
+\033[0;31mCritical: 0\033[0m
+\033[1;33mWarnings: 1\033[0m
+\033[0;32mPassed:   12\033[0m
+```
 
-Entry `../../../../.npm/_npx/3f5972881ed2733a/node_modules/saascode-kit/` is machine-specific.
-
-**Severity**: LOW
+The rest of the audit output uses `echo -e` correctly. Only the summary section uses plain `echo`.
 
 ---
 
@@ -132,16 +130,23 @@ Entry `../../../../.npm/_npx/3f5972881ed2733a/node_modules/saascode-kit/` is mac
 
 | Severity | Count |
 |----------|-------|
-| HIGH | 5 |
-| MEDIUM | 5 |
-| LOW | 4 |
-| **Total** | **14 open bugs** |
+| CRITICAL | 1 |
+| HIGH | 2 |
+| MEDIUM | 2 |
+| LOW | 1 |
+| **Total** | **6 new bugs** |
 
-### Previously Fixed
+### What's Fixed From Previous Report
 
-- `ast-review.ts` crashes without git repo — **FIXED** (falls back to `process.cwd()`)
-- Catch blocks with logging flagged as empty — **PARTIALLY FIXED** (AST-based detection, only comment-only bodies still flagged)
-- `audit` and `review` disagree on empty catches — **PARTIALLY FIXED** (both use `statements.length === 0` now)
-- `ast-review.sh` hardcodes submodule path — **FIXED** (paths updated)
-- Original `ast-review.ts` was NestJS-only — **FIXED** (now scans all .ts/.tsx)
-- PostToolUse hook runs broken validator — **REMOVED** (hook disabled)
+- Audit now reads manifest paths (was Bug 7: CLI router ignores paths)
+- Model name check skips constants files (was Bug 3: flags constants file)
+- AST review works on all TS/TSX files (was Bug 13: NestJS-only)
+- `ast-review.ts` no longer crashes without git (was Bug 8)
+- `ast-review.sh` uses correct script path (was Bug 7)
+- Audit properly skips non-applicable checks with skip messages
+
+### What's Still Present
+
+- innerHTML reads flagged as writes (40 criticals, many false positives)
+- Catches with comment-only bodies flagged as empty (~6 warnings, hidden in console noise)
+- Template engine doesn't render CLAUDE.md (still raw Handlebars)

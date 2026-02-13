@@ -3,10 +3,9 @@
 # SaasCode CLI — Quick access to all kit commands
 #
 # Usage:
-#   saascode <command> [options]
+#   saascode-kit <command> [options]
 #
-# Install:
-#   Add to your shell profile (~/.bashrc or ~/.zshrc):
+# Also available via shell alias:
 #   alias saascode='.saascode/scripts/saascode.sh'
 # ═══════════════════════════════════════════════════════════
 
@@ -22,6 +21,13 @@ export _LIB_ROOT="$ROOT"
 SCRIPTS_DIR="$ROOT/.saascode/scripts"
 CHECKLISTS_DIR="$ROOT/.saascode/checklists"
 RULES_DIR="$ROOT/.saascode/rules"
+
+# Fallback: if not installed yet, use kit's own directories
+if [ -n "$SAASCODE_KIT_DIR" ]; then
+  [ ! -d "$SCRIPTS_DIR" ] && SCRIPTS_DIR="$SAASCODE_KIT_DIR/scripts"
+  [ ! -d "$CHECKLISTS_DIR" ] && CHECKLISTS_DIR="$SAASCODE_KIT_DIR/checklists"
+  [ ! -d "$RULES_DIR" ] && RULES_DIR="$SAASCODE_KIT_DIR/rules"
+fi
 
 # ─── Commands ───
 
@@ -41,7 +47,10 @@ cmd_audit() {
   echo "${BOLD}Running Full Audit...${NC}"
   echo ""
   if [ -f "$SCRIPTS_DIR/full-audit.sh" ]; then
-    bash "$SCRIPTS_DIR/full-audit.sh"
+    source "$_LIB"
+    local BE=$(read_manifest "paths.backend" "apps/api")
+    local FE=$(read_manifest "paths.frontend" "apps/portal")
+    bash "$SCRIPTS_DIR/full-audit.sh" "$BE" "$FE"
   else
     echo "${RED}Error: full-audit.sh not found at $SCRIPTS_DIR${NC}"
     exit 1
@@ -89,7 +98,10 @@ cmd_predeploy() {
   echo "${BOLD}Running Pre-Deploy Checks...${NC}"
   echo ""
   if [ -f "$SCRIPTS_DIR/pre-deploy.sh" ]; then
-    bash "$SCRIPTS_DIR/pre-deploy.sh"
+    source "$_LIB"
+    local BE=$(read_manifest "paths.backend" "apps/api")
+    local FE=$(read_manifest "paths.frontend" "apps/portal")
+    bash "$SCRIPTS_DIR/pre-deploy.sh" "$BE" "$FE"
   else
     echo "${RED}Error: pre-deploy.sh not found at $SCRIPTS_DIR${NC}"
     exit 1
@@ -103,12 +115,91 @@ cmd_verify() {
     bash "$SCRIPTS_DIR/verify-setup.sh"
   else
     # Inline basic verify
+    source "$_LIB"
+    local LANG=$(read_manifest "stack.language" "typescript")
+    local DB=$(read_manifest "stack.backend.database" "")
+
     echo "Checking environment..."
+    echo "  Stack: $LANG"
     echo ""
-    node -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Node.js $(node -v)" || echo "  ${RED}✗${NC} Node.js not installed"
-    npm -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} npm $(npm -v)" || echo "  ${RED}✗${NC} npm not installed"
-    psql --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} PostgreSQL installed" || echo "  ${RED}✗${NC} PostgreSQL not installed"
-    [ -d "$ROOT/node_modules" ] && echo "  ${GREEN}✓${NC} Dependencies installed" || echo "  ${RED}✗${NC} Run: npm install"
+
+    # Language runtime & package manager
+    case "$LANG" in
+      typescript|javascript)
+        node -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Node.js $(node -v)" || echo "  ${RED}✗${NC} Node.js not installed"
+        if [ -f "$ROOT/pnpm-lock.yaml" ]; then
+          pnpm -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} pnpm $(pnpm -v)" || echo "  ${RED}✗${NC} pnpm not installed"
+        elif [ -f "$ROOT/yarn.lock" ]; then
+          yarn -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} yarn $(yarn -v)" || echo "  ${RED}✗${NC} yarn not installed"
+        else
+          npm -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} npm $(npm -v)" || echo "  ${RED}✗${NC} npm not installed"
+        fi
+        [ -d "$ROOT/node_modules" ] && echo "  ${GREEN}✓${NC} Dependencies installed" || echo "  ${RED}✗${NC} Run: npm install"
+        ;;
+      python)
+        python3 --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Python $(python3 --version 2>&1 | awk '{print $2}')" || echo "  ${RED}✗${NC} Python3 not installed"
+        pip3 --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} pip $(pip3 --version 2>&1 | awk '{print $2}')" || echo "  ${RED}✗${NC} pip not installed"
+        if [ -f "$ROOT/Pipfile" ]; then
+          pipenv --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} pipenv installed" || echo "  ${YELLOW}—${NC} pipenv not installed (Pipfile found)"
+        elif [ -f "$ROOT/poetry.lock" ]; then
+          poetry --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} poetry installed" || echo "  ${YELLOW}—${NC} poetry not installed (poetry.lock found)"
+        fi
+        [ -d "$ROOT/venv" ] || [ -d "$ROOT/.venv" ] && echo "  ${GREEN}✓${NC} Virtual environment found" || echo "  ${YELLOW}—${NC} No venv found"
+        ;;
+      go)
+        go version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Go $(go version 2>&1 | awk '{print $3}')" || echo "  ${RED}✗${NC} Go not installed"
+        [ -f "$ROOT/go.mod" ] && echo "  ${GREEN}✓${NC} go.mod found" || echo "  ${YELLOW}—${NC} No go.mod"
+        ;;
+      java)
+        java -version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Java $(java -version 2>&1 | head -1 | awk -F'\"' '{print $2}')" || echo "  ${RED}✗${NC} JDK not installed"
+        if [ -f "$ROOT/pom.xml" ] || find "$ROOT" -maxdepth 2 -name "pom.xml" -print -quit 2>/dev/null | grep -q .; then
+          mvn -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Maven $(mvn -v 2>&1 | head -1 | awk '{print $3}')" || echo "  ${RED}✗${NC} Maven not installed (pom.xml found)"
+        elif [ -f "$ROOT/build.gradle" ] || [ -f "$ROOT/build.gradle.kts" ]; then
+          gradle -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Gradle installed" || echo "  ${RED}✗${NC} Gradle not installed (build.gradle found)"
+        fi
+        ;;
+      ruby)
+        ruby -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Ruby $(ruby -v 2>&1 | awk '{print $2}')" || echo "  ${RED}✗${NC} Ruby not installed"
+        bundle -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Bundler $(bundle -v 2>&1 | awk '{print $3}')" || echo "  ${RED}✗${NC} Bundler not installed"
+        [ -f "$ROOT/Gemfile.lock" ] && echo "  ${GREEN}✓${NC} Gems locked" || echo "  ${YELLOW}—${NC} No Gemfile.lock"
+        ;;
+      rust)
+        rustc --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Rust $(rustc --version 2>&1 | awk '{print $2}')" || echo "  ${RED}✗${NC} Rust not installed"
+        cargo --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Cargo $(cargo --version 2>&1 | awk '{print $2}')" || echo "  ${RED}✗${NC} Cargo not installed"
+        [ -f "$ROOT/Cargo.lock" ] && echo "  ${GREEN}✓${NC} Cargo.lock found" || echo "  ${YELLOW}—${NC} No Cargo.lock"
+        ;;
+      php)
+        php -v >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} PHP $(php -v 2>&1 | head -1 | awk '{print $2}')" || echo "  ${RED}✗${NC} PHP not installed"
+        composer --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Composer $(composer --version 2>&1 | awk '{print $3}')" || echo "  ${RED}✗${NC} Composer not installed"
+        [ -f "$ROOT/vendor/autoload.php" ] && echo "  ${GREEN}✓${NC} Dependencies installed" || echo "  ${RED}✗${NC} Run: composer install"
+        ;;
+      *)
+        echo "  ${YELLOW}—${NC} Unknown language: $LANG"
+        ;;
+    esac
+
+    # Database check based on manifest
+    case "$DB" in
+      postgresql|postgres)
+        psql --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} PostgreSQL installed" || echo "  ${RED}✗${NC} PostgreSQL not installed"
+        ;;
+      mysql)
+        mysql --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} MySQL installed" || echo "  ${RED}✗${NC} MySQL not installed"
+        ;;
+      mongodb)
+        mongosh --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} MongoDB installed" || echo "  ${RED}✗${NC} MongoDB not installed"
+        ;;
+      sqlite)
+        sqlite3 --version >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} SQLite installed" || echo "  ${RED}✗${NC} SQLite not installed"
+        ;;
+      "")
+        echo "  ${YELLOW}—${NC} No database configured in manifest"
+        ;;
+      *)
+        echo "  ${YELLOW}—${NC} Database: $DB (manual verification needed)"
+        ;;
+    esac
+
     [ -f "$ROOT/.env" ] && echo "  ${GREEN}✓${NC} Root .env exists" || echo "  ${YELLOW}—${NC} No root .env"
     git -C "$ROOT" status >/dev/null 2>&1 && echo "  ${GREEN}✓${NC} Git repository" || echo "  ${RED}✗${NC} Not a git repo"
     echo ""
@@ -290,6 +381,164 @@ HOOKS_EOF
   echo "  ${GREEN}${BOLD}Updated $UPDATED files.${NC}"
 }
 
+cmd_docs() {
+  local MODE="simple"
+  local HAS_DIAGRAMS=false
+  for arg in "$@"; do
+    case "$arg" in
+      --simple)   MODE="simple" ;;
+      --full)     MODE="full" ;;
+      --diagrams) HAS_DIAGRAMS=true ;;
+    esac
+  done
+
+  local PROJECT_ROOT
+  PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  local CONTEXT_DIR="$PROJECT_ROOT/.claude/context"
+  mkdir -p "$CONTEXT_DIR"
+
+  if [ "$MODE" = "simple" ]; then
+    # ── Simple mode: lightweight directory tree + key file listing ──
+    echo "${BOLD}Generating Simple Project Docs...${NC}"
+    echo ""
+
+    local OUTPUT="$CONTEXT_DIR/project-overview.md"
+    source "$_LIB"
+    local PROJECT_NAME=$(read_manifest "project.name" "Project")
+    local BE=$(read_manifest "paths.backend" "apps/api")
+    local FE=$(read_manifest "paths.frontend" "apps/portal")
+
+    cat > "$OUTPUT" << EOF
+# ${PROJECT_NAME} — Project Overview (auto-generated)
+
+EOF
+
+    # Directory structure (depth 3)
+    echo "## Directory Structure" >> "$OUTPUT"
+    echo '```' >> "$OUTPUT"
+    if command -v tree >/dev/null 2>&1; then
+      tree -L 3 -I 'node_modules|.git|dist|.next|.turbo|coverage' --dirsfirst "$PROJECT_ROOT" >> "$OUTPUT" 2>/dev/null
+    else
+      # Fallback without tree
+      find "$PROJECT_ROOT" -maxdepth 3 \
+        -not -path '*/node_modules/*' \
+        -not -path '*/.git/*' \
+        -not -path '*/dist/*' \
+        -not -path '*/.next/*' \
+        -not -path '*/.turbo/*' \
+        -not -path '*/coverage/*' \
+        -type d 2>/dev/null | sed "s|$PROJECT_ROOT|.|" | sort >> "$OUTPUT"
+    fi
+    echo '```' >> "$OUTPUT"
+    echo "" >> "$OUTPUT"
+
+    # Key files
+    echo "## Key Files" >> "$OUTPUT"
+    for f in package.json tsconfig.json .env.example saascode-kit.yaml CLAUDE.md .cursorrules; do
+      [ -f "$PROJECT_ROOT/$f" ] && echo "- $f" >> "$OUTPUT"
+    done
+    echo "" >> "$OUTPUT"
+
+    # Stack summary from manifest
+    local LANG=$(read_manifest "stack.language" "")
+    local BF=$(read_manifest "stack.backend.framework" "")
+    local FF=$(read_manifest "stack.frontend.framework" "")
+    local DB=$(read_manifest "stack.backend.database" "")
+
+    if [ -n "$BF" ] || [ -n "$FF" ]; then
+      echo "## Stack" >> "$OUTPUT"
+      [ -n "$LANG" ] && echo "- Language: $LANG" >> "$OUTPUT"
+      [ -n "$BF" ] && echo "- Backend: $BF" >> "$OUTPUT"
+      [ -n "$FF" ] && echo "- Frontend: $FF" >> "$OUTPUT"
+      [ -n "$DB" ] && echo "- Database: $DB" >> "$OUTPUT"
+      echo "" >> "$OUTPUT"
+    fi
+
+    echo -e "  ${GREEN}✓${NC} Project overview generated: $OUTPUT"
+    echo ""
+
+  else
+    # ── Full mode: run snapshot.sh for detailed project map ──
+    echo "${BOLD}Generating Full Project Documentation...${NC}"
+    echo ""
+
+    if [ -f "$SCRIPTS_DIR/snapshot.sh" ]; then
+      bash "$SCRIPTS_DIR/snapshot.sh"
+    else
+      echo "${RED}Error: snapshot.sh not found at $SCRIPTS_DIR${NC}"
+      exit 1
+    fi
+  fi
+
+  # Optionally generate Mermaid diagrams (works with both modes)
+  if [ "$HAS_DIAGRAMS" = true ]; then
+    echo ""
+    echo "${BOLD}Generating Mermaid diagrams...${NC}"
+    echo ""
+
+    local DIAGRAMS_FILE="$CONTEXT_DIR/diagrams.md"
+
+    source "$_LIB"
+    local BE=$(read_manifest "paths.backend" "apps/api")
+
+    cat > "$DIAGRAMS_FILE" << 'DIAG_HEADER'
+# Architecture Diagrams (auto-generated)
+
+DIAG_HEADER
+
+    # Entity-relationship diagram from schema
+    local SCHEMA_PATH
+    SCHEMA_PATH=$(read_manifest "paths.schema" "$BE/prisma/schema.prisma")
+    local SCHEMA="$PROJECT_ROOT/$SCHEMA_PATH"
+
+    if [ -f "$SCHEMA" ]; then
+      echo '## Entity Relationship' >> "$DIAGRAMS_FILE"
+      echo '```mermaid' >> "$DIAGRAMS_FILE"
+      echo 'erDiagram' >> "$DIAGRAMS_FILE"
+      awk '
+        /^model / { model=$2 }
+        model && /^\s+\w/ {
+          if ($0 ~ /@@/ || $0 ~ /^\s+\/\//) next
+          field=$1; type=$2
+          if (field ~ /^@@/) next
+          gsub(/\?/, "", type); gsub(/\[\]/, "", type)
+          # Detect relations
+          if (type ~ /^[A-Z]/) {
+            printf "  %s ||--o{ %s : has\n", model, type
+          }
+        }
+        /^}/ { model="" }
+      ' "$SCHEMA" | sort -u >> "$DIAGRAMS_FILE"
+      echo '```' >> "$DIAGRAMS_FILE"
+      echo "" >> "$DIAGRAMS_FILE"
+      echo -e "  ${GREEN}✓${NC} ER diagram generated"
+    fi
+
+    # High-level architecture diagram
+    echo '## System Architecture' >> "$DIAGRAMS_FILE"
+    echo '```mermaid' >> "$DIAGRAMS_FILE"
+    echo 'graph TD' >> "$DIAGRAMS_FILE"
+    echo '  Client[Browser/Client] --> Frontend[Frontend]' >> "$DIAGRAMS_FILE"
+    echo '  Frontend --> API[Backend API]' >> "$DIAGRAMS_FILE"
+    echo '  API --> DB[(Database)]' >> "$DIAGRAMS_FILE"
+
+    local AUTH_PROVIDER
+    AUTH_PROVIDER=$(read_manifest "auth.provider" "")
+    [ -n "$AUTH_PROVIDER" ] && echo "  API --> Auth[$AUTH_PROVIDER]" >> "$DIAGRAMS_FILE"
+
+    local CACHE
+    CACHE=$(read_manifest "stack.backend.cache" "")
+    [ -n "$CACHE" ] && [ "$CACHE" != "none" ] && echo "  API --> Cache[$CACHE]" >> "$DIAGRAMS_FILE"
+
+    echo '```' >> "$DIAGRAMS_FILE"
+    echo "" >> "$DIAGRAMS_FILE"
+
+    echo -e "  ${GREEN}✓${NC} Architecture diagram generated"
+    echo ""
+    echo -e "${GREEN}Diagrams written to: $DIAGRAMS_FILE${NC}"
+  fi
+}
+
 cmd_snapshot() {
   echo "${BOLD}Generating Project Snapshot...${NC}"
   echo ""
@@ -310,10 +559,46 @@ cmd_intent() {
   fi
 }
 
+cmd_report() {
+  if [ -f "$SCRIPTS_DIR/report-cli.sh" ]; then
+    bash "$SCRIPTS_DIR/report-cli.sh" "$@"
+  else
+    echo "${RED}Error: report-cli.sh not found at $SCRIPTS_DIR${NC}"
+    exit 1
+  fi
+}
+
+cmd_sweep() {
+  if [ -f "$SCRIPTS_DIR/sweep-cli.sh" ]; then
+    bash "$SCRIPTS_DIR/sweep-cli.sh" "$@"
+  else
+    echo "${RED}Error: sweep-cli.sh not found at $SCRIPTS_DIR${NC}"
+    exit 1
+  fi
+}
+
+cmd_cloak() {
+  if [ -f "$SCRIPTS_DIR/cloak-cli.sh" ]; then
+    bash "$SCRIPTS_DIR/cloak-cli.sh" cloak "$@"
+  else
+    echo "${RED}Error: cloak-cli.sh not found at $SCRIPTS_DIR${NC}"
+    exit 1
+  fi
+}
+
+cmd_uncloak() {
+  if [ -f "$SCRIPTS_DIR/cloak-cli.sh" ]; then
+    bash "$SCRIPTS_DIR/cloak-cli.sh" uncloak "$@"
+  else
+    echo "${RED}Error: cloak-cli.sh not found at $SCRIPTS_DIR${NC}"
+    exit 1
+  fi
+}
+
 cmd_check_file() {
   local FILE="${1}"
   if [ -z "$FILE" ]; then
-    echo "Usage: saascode check-file <filepath>"
+    echo "Usage: saascode-kit check-file <filepath>"
     exit 1
   fi
   bash "$SCRIPTS_DIR/check-file.sh" "$FILE"
@@ -544,70 +829,83 @@ cmd_windsurf() {
 
 cmd_help() {
   echo ""
-  echo "${BOLD}SaasCode CLI${NC} — SaaS development toolkit"
+  echo "${BOLD}SaasCode Kit${NC} — SaaS development toolkit"
   echo ""
   echo "${BOLD}COMMANDS${NC}"
   echo ""
   echo "  ${CYAN}Setup:${NC}"
-  printf "  %-24s %s\n" "saascode init" "Run setup.sh to bootstrap kit in project"
-  printf "  %-24s %s\n" "saascode update" "Sync kit source → installed locations"
-  printf "  %-24s %s\n" "saascode verify" "Verify development environment setup"
-  printf "  %-24s %s\n" "saascode status" "Show kit installation status"
+  printf "  %-28s %s\n" "saascode-kit init" "Run setup.sh to bootstrap kit in project"
+  printf "  %-28s %s\n" "saascode-kit update" "Sync kit source → installed locations"
+  printf "  %-28s %s\n" "saascode-kit verify" "Verify development environment setup"
+  printf "  %-28s %s\n" "saascode-kit status" "Show kit installation status"
   echo ""
   echo "  ${CYAN}IDE Setup:${NC}"
-  printf "  %-24s %s\n" "saascode claude" "Install Claude Code config (CLAUDE.md, skills, hooks)"
-  printf "  %-24s %s\n" "saascode cursor" "Install Cursor config (.cursorrules, rules)"
-  printf "  %-24s %s\n" "saascode windsurf" "Install Windsurf config (.windsurfrules)"
+  printf "  %-28s %s\n" "saascode-kit claude" "Install Claude Code config (CLAUDE.md, skills, hooks)"
+  printf "  %-28s %s\n" "saascode-kit cursor" "Install Cursor config (.cursorrules, rules)"
+  printf "  %-28s %s\n" "saascode-kit windsurf" "Install Windsurf config (.windsurfrules)"
   echo ""
   echo "  ${CYAN}Code Review:${NC}"
-  printf "  %-24s %s\n" "saascode review" "AST-based code review (ts-morph)"
-  printf "  %-24s %s\n" "saascode review --ai" "AI-powered review (auto-detects provider)"
-  printf "  %-24s %s\n" "saascode review --ai --provider X" "Use specific provider (groq/openai/claude/gemini/deepseek/kimi/qwen)"
-  printf "  %-24s %s\n" "saascode review --ai --model X" "Override default model"
-  printf "  %-24s %s\n" "saascode review --ai --file X" "AI review a specific file"
-  printf "  %-24s %s\n" "saascode check-file <path>" "Single-file validator (Claude Code hook)"
+  printf "  %-28s %s\n" "saascode-kit review" "AST-based code review (ts-morph)"
+  printf "  %-28s %s\n" "saascode-kit review --ai" "AI-powered review (auto-detects provider)"
+  printf "  %-28s %s\n" "saascode-kit review --ai --provider X" "Use specific provider (groq/openai/claude/gemini/deepseek/kimi/qwen)"
+  printf "  %-28s %s\n" "saascode-kit review --ai --model X" "Override default model"
+  printf "  %-28s %s\n" "saascode-kit review --ai --file X" "AI review a specific file"
+  printf "  %-28s %s\n" "saascode-kit check-file <path>" "Single-file validator (Claude Code hook)"
   echo ""
   echo "  ${CYAN}Analysis:${NC}"
-  printf "  %-24s %s\n" "saascode audit" "Run full security + quality audit"
-  printf "  %-24s %s\n" "saascode parity" "Check frontend-backend endpoint parity"
-  printf "  %-24s %s\n" "saascode snapshot" "Generate project-map.md from codebase"
+  printf "  %-28s %s\n" "saascode-kit sweep" "Run ALL checks (audit + predeploy + review)"
+  printf "  %-28s %s\n" "saascode-kit sweep --ai" "Full sweep with AI review"
+  printf "  %-28s %s\n" "saascode-kit audit" "Run full security + quality audit"
+  printf "  %-28s %s\n" "saascode-kit parity" "Check frontend-backend endpoint parity"
+  printf "  %-28s %s\n" "saascode-kit snapshot" "Generate project-map.md from codebase"
+  printf "  %-28s %s\n" "saascode-kit docs" "Quick project overview (directory tree + stack)"
+  printf "  %-28s %s\n" "saascode-kit docs --full" "Full docs (models, endpoints, pages, components)"
+  printf "  %-28s %s\n" "saascode-kit docs --diagrams" "Add Mermaid architecture diagrams"
   echo ""
   echo "  ${CYAN}Tracking:${NC}"
-  printf "  %-24s %s\n" "saascode intent" "View AI edit intent log"
-  printf "  %-24s %s\n" "saascode intent --summary" "Session summaries"
+  printf "  %-28s %s\n" "saascode-kit intent" "View AI edit intent log"
+  printf "  %-28s %s\n" "saascode-kit intent --summary" "Session summaries"
+  printf "  %-28s %s\n" "saascode-kit report" "View detected issues"
+  printf "  %-28s %s\n" "saascode-kit report --github" "File issues to GitHub"
+  printf "  %-28s %s\n" "saascode-kit report --summary" "Issue counts by category"
+  echo ""
+  echo "  ${CYAN}Stealth:${NC}"
+  printf "  %-28s %s\n" "saascode-kit cloak" "Hide all kit + AI tool traces from repo"
+  printf "  %-28s %s\n" "saascode-kit cloak --name .tools" "Use custom directory name"
+  printf "  %-28s %s\n" "saascode-kit uncloak" "Reverse stealth mode, restore all files"
   echo ""
   echo "  ${CYAN}Deployment:${NC}"
-  printf "  %-24s %s\n" "saascode predeploy" "Run pre-deployment gates"
-  printf "  %-24s %s\n" "saascode checklist [name]" "Show a checklist (feature-complete, security-review, deploy-ready)"
+  printf "  %-28s %s\n" "saascode-kit predeploy" "Run pre-deployment gates"
+  printf "  %-28s %s\n" "saascode-kit checklist [name]" "Show a checklist (feature-complete, security-review, deploy-ready)"
   echo ""
   echo "  ${CYAN}Info:${NC}"
-  printf "  %-24s %s\n" "saascode rules" "List installed Semgrep rules"
-  printf "  %-24s %s\n" "saascode skills" "List installed Claude Code skills"
-  printf "  %-24s %s\n" "saascode help" "This help message"
+  printf "  %-28s %s\n" "saascode-kit rules" "List installed Semgrep rules"
+  printf "  %-28s %s\n" "saascode-kit skills" "List installed Claude Code skills"
+  printf "  %-28s %s\n" "saascode-kit help" "This help message"
   echo ""
   echo "  ${CYAN}Claude Code Skills (use in Claude Code conversation):${NC}"
-  printf "  %-24s %s\n" "/audit" "Security + quality scan"
-  printf "  %-24s %s\n" "/build" "Build a new feature step-by-step"
-  printf "  %-24s %s\n" "/test [feature]" "Write + run tests"
-  printf "  %-24s %s\n" "/debug" "Classify + trace bugs"
-  printf "  %-24s %s\n" "/docs [init|full|feature]" "Organize documentation"
-  printf "  %-24s %s\n" "/api [all|module|postman]" "Generate API reference"
-  printf "  %-24s %s\n" "/migrate [plan|apply]" "Database migration workflow"
-  printf "  %-24s %s\n" "/deploy [env|rollback]" "Deployment guide"
-  printf "  %-24s %s\n" "/changelog [version]" "Generate changelog from git"
-  printf "  %-24s %s\n" "/onboard" "Developer onboarding guide"
-  printf "  %-24s %s\n" "/learn [finding]" "Capture bug patterns for self-improvement"
-  printf "  %-24s %s\n" "/preflight" "Pre-deploy checklist"
-  printf "  %-24s %s\n" "/review" "PR review"
+  printf "  %-28s %s\n" "/audit" "Security + quality scan"
+  printf "  %-28s %s\n" "/build" "Build a new feature step-by-step"
+  printf "  %-28s %s\n" "/test [feature]" "Write + run tests"
+  printf "  %-28s %s\n" "/debug" "Classify + trace bugs"
+  printf "  %-28s %s\n" "/docs [init|full|feature]" "Organize documentation"
+  printf "  %-28s %s\n" "/api [all|module|postman]" "Generate API reference"
+  printf "  %-28s %s\n" "/migrate [plan|apply]" "Database migration workflow"
+  printf "  %-28s %s\n" "/deploy [env|rollback]" "Deployment guide"
+  printf "  %-28s %s\n" "/changelog [version]" "Generate changelog from git"
+  printf "  %-28s %s\n" "/onboard" "Developer onboarding guide"
+  printf "  %-28s %s\n" "/learn [finding]" "Capture bug patterns for self-improvement"
+  printf "  %-28s %s\n" "/preflight" "Pre-deploy checklist"
+  printf "  %-28s %s\n" "/review" "PR review"
   echo ""
   echo "  ${CYAN}Automatic (git hooks):${NC}"
-  printf "  %-24s %s\n" "pre-commit" "Secrets, .env, debug statements, large files"
-  printf "  %-24s %s\n" "pre-push" "TypeScript, build, security audit"
+  printf "  %-28s %s\n" "pre-commit" "Secrets, .env, debug statements, large files"
+  printf "  %-28s %s\n" "pre-push" "TypeScript, build, security audit"
   echo ""
   echo "  ${CYAN}CI/CD (GitHub Actions):${NC}"
-  printf "  %-24s %s\n" "On PR" "TypeScript, build, endpoint parity, secrets"
+  printf "  %-28s %s\n" "On PR" "TypeScript, build, endpoint parity, secrets"
   echo ""
-  echo "${DIM}Setup: alias saascode='.saascode/scripts/saascode.sh'${NC}"
+  echo "${DIM}Also available as: alias saascode='.saascode/scripts/saascode.sh'${NC}"
   echo ""
 }
 
@@ -629,11 +927,16 @@ case "$COMMAND" in
   checklist)  cmd_checklist "$@" ;;
   rules)      cmd_rules "$@" ;;
   skills)     cmd_skills "$@" ;;
+  docs)       cmd_docs "$@" ;;
   snapshot)   cmd_snapshot "$@" ;;
   update)     cmd_update "$@" ;;
   status)     cmd_status "$@" ;;
   check-file) cmd_check_file "$@" ;;
   intent)     cmd_intent "$@" ;;
+  report)     cmd_report "$@" ;;
+  sweep)      cmd_sweep "$@" ;;
+  cloak)      cmd_cloak "$@" ;;
+  uncloak)    cmd_uncloak "$@" ;;
   help|--help|-h)  cmd_help ;;
   *)
     echo "${RED}Unknown command: $COMMAND${NC}"
