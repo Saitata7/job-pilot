@@ -617,3 +617,59 @@ find . -path "*/src/modules/*" -name "*.module.ts" | grep -v node_modules
 | 14 | `/docs` skill scan commands and structure are NestJS-focused | MEDIUM |
 
 **Total: 14 bugs — 7 HIGH / 4 MEDIUM / 3 LOW**
+
+---
+
+## Bug 15: `.claude/context/` Directory Is Empty — Skills Reference Non-Existent Files
+
+The `.claude/context/` directory is completely empty. The kit's `saascode snapshot` command was supposed to generate `project-map.md` there, but because the snapshot scans for Prisma models, NestJS controllers, and Next.js pages (none of which exist in this Chrome extension), it generated an empty file with:
+
+```
+Models: 0
+Enums: 0
+Controllers: 0
+Pages: 0
+```
+
+**4 skills depend on `.claude/context/` files that don't exist:**
+
+| Skill | References | File Expected |
+|-------|-----------|---------------|
+| `build-feature.md` | "FIRST: Read `.claude/context/project-map.md` AND `.claude/context/golden-reference.md`" | Both missing |
+| `review-pr.md` | "FIRST: Read `.claude/context/project-map.md` for endpoints, models, patterns" | Missing |
+| `recipe.md` | "FIRST: Read `.claude/context/project-map.md` to check existing models/endpoints" | Missing |
+| `changelog.md` | "FIRST: Read `.claude/context/project-map.md` for feature names and module structure" | Missing |
+
+**Root cause chain:**
+1. `saascode snapshot` generates `project-map.md` → but only knows how to scan NestJS/Prisma/Next.js
+2. For non-NestJS projects, it produces an empty map (0 everything)
+3. `golden-reference.md` is never generated at all — no command or init step creates it
+4. Skills that depend on these files will either fail silently or skip their "FIRST" step
+
+**Impact**: The `build-feature`, `review-pr`, `recipe`, and `changelog` skills all instruct the AI to read context files as their first action. When those files are missing, the skills operate without project context — defeating the purpose of the kit.
+
+**Severity**: MEDIUM — Skills degrade to generic behavior without project context.
+
+---
+
+## Final Cumulative Bug Count
+
+| # | Bug | Severity |
+|---|-----|----------|
+| 1 | Template engine doesn't render CLAUDE.md | HIGH |
+| 2 | Hardcoded NestJS monorepo paths in templates | HIGH |
+| 3 | Config naming: `saascode-kit.yaml` vs `manifest.yaml` | HIGH |
+| 4 | Machine-specific npx hash in .gitignore | LOW |
+| 5 | CI pipeline will fail (wrong build commands) | HIGH |
+| 6 | PostToolUse hook runs broken validator | MEDIUM |
+| 7 | `ast-review.sh` hardcodes submodule path, breaks with npx install | HIGH |
+| 8 | `ast-review.ts` crashes without git repo | MEDIUM |
+| 9 | `echo "\n"` instead of `echo -e "\n"` in audit script | LOW |
+| 10 | YAML parser includes inline comments in path values | MEDIUM |
+| 11 | CLI router ignores manifest paths for audit/predeploy | HIGH |
+| 12 | `verify` checks for PostgreSQL regardless of database config | LOW |
+| 13 | Original `ast-review.ts` is NestJS-only — ignores all non-NestJS projects | HIGH |
+| 14 | `/docs` skill scan commands and structure are NestJS-focused | MEDIUM |
+| 15 | `.claude/context/` is empty — snapshot produces nothing for non-NestJS, `golden-reference.md` never generated, 4 skills depend on missing files | MEDIUM |
+
+**Total: 15 bugs — 7 HIGH / 5 MEDIUM / 3 LOW**
