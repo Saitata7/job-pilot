@@ -1,0 +1,92 @@
+{
+  "manifest_version": 3,
+  "name": "Jobs Pilot",
+  "version": "1.0.0",
+  "description": "Local-first AI Job Assistant - Smart job matching, cover letters, and autofill",
+
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "activeTab",
+    "contextMenus"
+  ],
+
+  "host_permissions": [
+    "https://www.linkedin.com/jobs/*",
+    "https://www.indeed.com/*",
+    "https://boards.greenhouse.io/*",
+    "https://*.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://*.lever.co/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://www.dice.com/*",
+    "https://www.monster.com/*",
+    "http://localhost:*/*",
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "exclude_matches": [
+        "https://mail.google.com/*",
+        "https://calendar.google.com/*",
+        "https://docs.google.com/*",
+        "https://drive.google.com/*",
+        "https://www.youtube.com/*",
+        "https://www.google.com/search*",
+        "https://www.facebook.com/*",
+        "https://twitter.com/*",
+        "https://x.com/*",
+        "https://www.instagram.com/*",
+        "https://www.reddit.com/*",
+        "https://github.com/*",
+        "https://stackoverflow.com/*"
+      ],
+      "js": ["src/content/index.ts"],
+      "css": ["src/content/styles.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/autofill-content.ts"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
+    "default_title": "Jobs Pilot"
+  },
+
+  "options_ui": {
+    "page": "src/options/index.html",
+    "open_in_tab": true
+  },
+
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content/styles.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

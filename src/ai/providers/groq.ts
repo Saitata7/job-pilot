@@ -1,0 +1,235 @@
+import type { AIProviderInterface, ChatMessage, ChatOptions, ChatResponse } from '@shared/types/ai.types';
+import type { GroqConfig } from '@shared/types/settings.types';
+
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
+export class GroqProvider implements AIProviderInterface {
+  name = 'Groq';
+  isLocal = false;
+
+  private apiKey: string;
+  private model: string;
+  private baseUrl = 'https://api.groq.com/openai/v1';
+
+  constructor(config: GroqConfig) {
+    this.apiKey = config.apiKey;
+    this.model = config.model || 'llama-3.3-70b-versatile';
+  }
+
+  /**
+   * Sleep helper for rate limit delays
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Parse rate limit retry delay from error response
+   */
+  private parseRetryDelay(errorMessage: string): number {
+    // Parse "Please try again in 229.999999ms" or similar
+    const msMatch = errorMessage.match(/try again in ([\d.]+)ms/i);
+    if (msMatch) {
+      return Math.ceil(parseFloat(msMatch[1])) + 100; // Add 100ms buffer
+    }
+
+    const secMatch = errorMessage.match(/try again in ([\d.]+)s/i);
+    if (secMatch) {
+      return Math.ceil(parseFloat(secMatch[1]) * 1000) + 100;
+    }
+
+    return BASE_DELAY_MS; // Default fallback
+  }
+
+  async chat(messages: ChatMessage[], options?: ChatOptions): Promise<ChatResponse> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            temperature: options?.temperature ?? 0.7,
+            max_tokens: options?.maxTokens ?? 2048,
+            stream: false,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          const errorMessage = error.error?.message || response.statusText;
+
+          // Check if rate limited (429) or contains rate limit message
+          const isRateLimited = response.status === 429 ||
+            errorMessage.toLowerCase().includes('rate limit');
+
+          if (isRateLimited && attempt < MAX_RETRIES - 1) {
+            const retryDelay = this.parseRetryDelay(errorMessage);
+            console.log(`[Groq] Rate limited, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            await this.sleep(retryDelay);
+            continue;
+          }
+
+          throw new Error(`Groq request failed: ${errorMessage}`);
+        }
+
+        const data = await response.json();
+        const choice = data.choices?.[0];
+
+        return {
+          content: choice?.message?.content || '',
+          tokensUsed: {
+            prompt: data.usage?.prompt_tokens || 0,
+            completion: data.usage?.completion_tokens || 0,
+            total: data.usage?.total_tokens || 0,
+          },
+          model: this.model,
+          finishReason: choice?.finish_reason === 'stop' ? 'stop' : 'length',
+        };
+      } catch (error) {
+        lastError = error as Error;
+
+        // Check if error message contains rate limit info
+        const errorMessage = lastError.message || '';
+        const isRateLimited = errorMessage.toLowerCase().includes('rate limit');
+
+        if (isRateLimited && attempt < MAX_RETRIES - 1) {
+          const retryDelay = this.parseRetryDelay(errorMessage);
+          console.log(`[Groq] Rate limited (catch), retrying in ${retryDelay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+          await this.sleep(retryDelay);
+          continue;
+        }
+
+        throw lastError;
+      }
+    }
+
+    throw lastError || new Error('Groq request failed after retries');
+  }
+
+  async *chatStream(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string> {
+    let response: Response | null = null;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        response = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            temperature: options?.temperature ?? 0.7,
+            max_tokens: options?.maxTokens ?? 2048,
+            stream: true,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          const errorMessage = error.error?.message || response.statusText;
+
+          const isRateLimited = response.status === 429 ||
+            errorMessage.toLowerCase().includes('rate limit');
+
+          if (isRateLimited && attempt < MAX_RETRIES - 1) {
+            const retryDelay = this.parseRetryDelay(errorMessage);
+            console.log(`[Groq Stream] Rate limited, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            await this.sleep(retryDelay);
+            continue;
+          }
+
+          throw new Error(`Groq request failed: ${errorMessage}`);
+        }
+
+        break; // Success, exit retry loop
+      } catch (error) {
+        lastError = error as Error;
+        const errorMessage = lastError.message || '';
+        const isRateLimited = errorMessage.toLowerCase().includes('rate limit');
+
+        if (isRateLimited && attempt < MAX_RETRIES - 1) {
+          const retryDelay = this.parseRetryDelay(errorMessage);
+          console.log(`[Groq Stream] Rate limited (catch), retrying in ${retryDelay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+          await this.sleep(retryDelay);
+          continue;
+        }
+
+        throw lastError;
+      }
+    }
+
+    if (!response || !response.ok) {
+      throw lastError || new Error('Groq stream request failed after retries');
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') return;
+
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) yield content;
+          } catch {
+            // Skip invalid JSON
+          }
+        }
+      }
+    }
+  }
+
+  countTokens(text: string): number {
+    return Math.ceil(text.length / 4);
+  }
+
+  getMaxContextLength(): number {
+    if (this.model.includes('70b')) return 131072;
+    if (this.model.includes('8b')) return 131072;
+    return 32768;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    if (!this.apiKey) return false;
+
+    try {
+      const response = await fetch(`${this.baseUrl}/models`, {
+        headers: { 'Authorization': `Bearer ${this.apiKey}` },
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+}

@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Misc
+*.local
+# SaasCode Kit — personal/IDE-specific (not shared with team)
+../../../../.npm/_npx/3f5972881ed2733a/node_modules/saascode-kit/
+CLAUDE.md
+.cursorrules
+.windsurfrules
+.claude/skills/
+.cursor/rules/
+docs/diagrams/visual/exported/
