@@ -363,3 +363,110 @@ Reports installed file counts. This is the only command that works as expected s
 | 10 | YAML parser includes inline comments in path values | MEDIUM | Runtime — `saascode snapshot` |
 
 **Total: 10 bugs found, 5 HIGH / 3 MEDIUM / 2 LOW**
+
+---
+
+## Full Runtime Test (2026-02-12, Run 2 — with git initialized)
+
+Initialized git repo to unblock git-dependent commands. Ran all 8 CLI commands.
+
+### Results Summary
+
+| Command | Status | Exit Code | Useful Output? |
+|---------|--------|-----------|----------------|
+| `saascode review` | CRASHED | 2 | No — `apps/api/tsconfig.json` not found (Bug 2: hardcoded NestJS path) |
+| `saascode audit` | RAN | 0 | No — 9/10 checks are false passes (scanning wrong patterns). **Bug 11**: CLI router ignores manifest paths, defaults to `apps/api` and `apps/portal` |
+| `saascode parity` | RAN | 0 | No — 0 vs 0 = false "PASS" (no REST endpoints exist) |
+| `saascode predeploy` | RAN | 1 | Partially — TypeScript check + secrets check passed legitimately. **5 of 7 gates failed for wrong reasons** |
+| `saascode verify` | RAN | 0 | Partially — **Bug 12**: Reports "PostgreSQL installed ✓" as a pass for a Chrome extension that has no PostgreSQL dependency |
+| `saascode snapshot` | RAN | 0 | No — 0 models, 0 enums, 0 controllers, 0 pages (empty project map) |
+| `saascode check-file` | RAN | 0 | **YES — most useful command.** Found 5 real warnings (see below) |
+| `saascode review --ai` | FAILED | 1 | No — needs API key in `.env` file. Supports Groq (free), OpenAI, Anthropic, Gemini, DeepSeek, Moonshot, DashScope |
+
+### `saascode review` — AST Review (Still Crashed)
+
+Even with git repo initialized, crashes because `ast-review.ts` line 23-24 hardcodes:
+```typescript
+const API_SRC = path.join(PROJECT_ROOT, 'apps/api/src');
+const TSCONFIG = path.join(PROJECT_ROOT, 'apps/api/tsconfig.json');
+```
+Neither path exists. The manifest `paths.backend: "src/background"` is ignored.
+
+### `saascode audit` — Bug 11: CLI Router Ignores Manifest Paths
+
+When run via `saascode.sh audit`, it defaults to `apps/api` and `apps/portal` instead of reading the manifest paths (`src/background` and `src/options`). Previous run worked only because we passed paths manually: `full-audit.sh src/background src/options`.
+
+**Bug 11**: `saascode.sh` CLI router does not pass manifest-configured paths to `full-audit.sh`.
+
+### `saascode predeploy` — Pre-Deploy Gates
+
+| Gate | Result | Accurate? |
+|------|--------|-----------|
+| TypeScript Check | PASS | **Legitimate** |
+| Backend Build (`npm --prefix apps/api run build`) | FAIL | **Wrong** — no `apps/api/package.json`. Correct command: `npm run build` |
+| Frontend Build (`npm --prefix apps/portal run build`) | FAIL | **Wrong** — no `apps/portal/package.json`. Correct command: `npm run build` |
+| Backend Tests (`npm --prefix apps/api run test`) | FAIL | **Wrong** — same path issue. Correct: `npm test` |
+| Security Audit | FAIL | **Legitimate** — npm audit found vulnerabilities |
+| No Hardcoded Secrets | PASS | **Legitimate** |
+| API Health Check (`curl localhost:4000/health`) | FAIL | **Wrong** — Chrome extensions have no HTTP health endpoint |
+
+2 of 7 passes are legitimate. 5 of 7 failures are false (wrong commands/wrong assumptions).
+
+### `saascode verify` — Environment Check
+
+| Check | Result | Accurate? |
+|-------|--------|-----------|
+| Node.js v20.5.0 | PASS | Legitimate |
+| npm 10.5.2 | PASS | Legitimate |
+| PostgreSQL installed | PASS | **Bug 12: FALSE PASS** — This project has no PostgreSQL dependency. The kit checks for PostgreSQL regardless of `stack.backend.database` setting. |
+| Dependencies installed | PASS | Legitimate |
+| No root .env | SKIP | Legitimate (Chrome extension stores keys in Chrome storage, not .env) |
+| Git repository | PASS | Legitimate |
+
+### `saascode check-file` — Single File Validator (MOST USEFUL)
+
+Ran against `src/background/message-handler.ts`. Found **5 real warnings**:
+
+| Warning | Accurate? | Notes |
+|---------|-----------|-------|
+| `console.log found (24 occurrences)` | **Partially** — Chrome extensions use console for dev inspection, but 24 is excessive for production |
+| `User input interpolated into AI prompt — risk of prompt injection (line 1112)` | **YES — Real finding** — JD text going directly into AI prompts |
+| `Hardcoded AI model name (line 391)` | **YES — Real finding** — model names should be in config |
+| `Hardcoded AI model name (line 392)` | **YES — Real finding** — same |
+| `switch statement without default case (line 16)` | **YES — Real finding** — message handler switch should have default |
+
+This is the **only command that produced genuinely useful results** for this project.
+
+### `saascode review --ai` — AI Review
+
+Requires an API key in `.env`. Supports 7 providers: Groq (free), OpenAI, Anthropic, Gemini, DeepSeek, Moonshot, DashScope. Could be useful if configured, but the system prompt would still inject NestJS-specific review rules.
+
+---
+
+## New Bugs Found (Run 2)
+
+| # | Bug | Severity | Found During |
+|---|-----|----------|-------------|
+| 11 | `saascode.sh` CLI router ignores manifest paths — `audit` defaults to `apps/api` and `apps/portal` | HIGH | Runtime — `saascode audit` (run 2) |
+| 12 | `verify` checks for PostgreSQL regardless of `stack.backend.database` config | LOW | Runtime — `saascode verify` |
+
+---
+
+## Cumulative Bug Count
+
+| # | Bug | Severity |
+|---|-----|----------|
+| 1 | Template engine doesn't render CLAUDE.md | HIGH |
+| 2 | Hardcoded NestJS monorepo paths in templates | HIGH |
+| 3 | Config naming: `saascode-kit.yaml` vs `manifest.yaml` | HIGH |
+| 4 | Machine-specific npx hash in .gitignore | LOW |
+| 5 | CI pipeline will fail (wrong build commands) | HIGH |
+| 6 | PostToolUse hook runs broken validator | MEDIUM |
+| 7 | `ast-review.sh` hardcodes submodule path, breaks with npx install | HIGH |
+| 8 | `ast-review.ts` crashes without git repo | MEDIUM |
+| 9 | `echo "\n"` instead of `echo -e "\n"` in audit script | LOW |
+| 10 | YAML parser includes inline comments in path values | MEDIUM |
+| 11 | CLI router ignores manifest paths for audit/predeploy | HIGH |
+| 12 | `verify` checks for PostgreSQL regardless of database config | LOW |
+
+**Total: 12 bugs — 6 HIGH / 3 MEDIUM / 3 LOW**
